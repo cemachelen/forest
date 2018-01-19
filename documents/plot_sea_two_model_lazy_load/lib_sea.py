@@ -1,15 +1,12 @@
-import sys
-
 import time
 import os
-
-if sys.version[0] == '3':
-    import urllib.request
+import urllib.request
+import datetime
+import dateutil.parser
 
 import matplotlib.colors
 import matplotlib.cm
 import numpy
-
 
 # download files from AWS S3 if not present
 def download_from_s3(s3_url, local_path):
@@ -209,5 +206,15 @@ def get_image_array_from_figure(fig):
 
     # canvas.tostring_argb give pixmap in ARGB mode. Roll the ALPHA channel to have it in RGBA mode
     buf = numpy.roll ( buf, 3, axis = 2 )
-    buf = buf[::-1, :, :]
+    buf = numpy.flip(buf,axis=0)
     return buf
+    
+def get_model_run_times(num_days):
+    lastweek = datetime.datetime.now() + datetime.timedelta(days=-num_days)
+    lw_mn_str = '{dt.year:04}{dt.month:02}{dt.day:02}T0000Z'.format(dt=lastweek)
+    lw_midnight = dateutil.parser.parse(str(lw_mn_str))
+    fmt_str='{dt.year:04}{dt.month:02}{dt.day:02}T{dt.hour:02}{dt.minute:02}Z'
+    forecast_datetimes  = [lw_midnight + datetime.timedelta(hours=step1) for step1 in range(0,144,12)]
+    forecast_dt_str_list = [fmt_str.format(dt=dt1) for dt1 in forecast_datetimes]
+    return forecast_datetimes, forecast_dt_str_list
+    

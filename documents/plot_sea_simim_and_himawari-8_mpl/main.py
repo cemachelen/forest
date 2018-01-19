@@ -221,14 +221,12 @@ class SEA_plot(object):
         Initialisation function for SEA_plot class
         '''
         self.main_plot = None
-        self.current_time = 0
         self.plot_options = po1
         self.dataset = dataset
         self.figure_name = figname
         self.current_type = plot_type
         self.current_time = time
-        self.current_config = conf
-        self.plot_description = self.dataset[self.current_config]['data_type_name']
+        self.set_config(conf)
         self.use_mpl_title = False
         self.show_axis_ticks = False
         self.show_colorbar = False
@@ -251,6 +249,11 @@ class SEA_plot(object):
         self.update_funcs = {'simim': self.update_simim,
                              'himawari-8': self.update_him8,
                             }
+                            
+    def set_config(self, new_config):
+        self.current_config = new_config
+        self.plot_description = self.dataset[self.current_config]['data_type_name']
+    
           
     def update_him8(self):
     
@@ -364,7 +367,8 @@ class SEA_plot(object):
         '''
         
         self.update_funcs[self.current_type]()
-        self.current_axes.set_title(self.current_title)
+        if self.use_mpl_title:
+            self.current_axes.set_title(self.current_title)
         self.current_figure.canvas.draw_idle()
         
         self.update_bokeh_img_plot_from_fig()
@@ -403,12 +407,17 @@ class SEA_plot(object):
         self.current_img_array = lib_sea.get_image_array_from_figure(self.current_figure)
         print('size of image array is {0}'.format(self.current_img_array.shape))
         
-        self.bokeh_figure = bokeh.plotting.figure(plot_width=600, 
-                                                  plot_height=450, 
-                                                  x_range=(90, 154),
-                                                  y_range=(-18, 30), 
-                                                  toolbar_location=None,
+        # Set figure navigation limits
+        x_limits = bokeh.models.Range1d(90, 154, bounds = (90, 154))
+        y_limits = bokeh.models.Range1d(-18, 30, bounds = (-18, 30))
+        
+        # Initialize figure        
+        self.bokeh_figure = bokeh.plotting.figure(plot_width=800, 
+                                                  plot_height=600, 
+                                                  x_range = x_limits,
+                                                  y_range = y_limits, 
                                                   tools = 'pan,wheel_zoom,reset')
+                                                  
         latitude_range = 48
         longitude_range = 64
         self.bokeh_image = self.bokeh_figure.image_rgba(image=[self.current_img_array], 
@@ -425,8 +434,8 @@ class SEA_plot(object):
         '''
         
         '''
-        
         self.current_img_array = lib_sea.get_image_array_from_figure(self.current_figure)
+        self.bokeh_figure.title.text = self.current_title
         self.bokeh_img_ds.data[u'image'] = [self.current_img_array]  
         
     def share_axes(self, axes_list):
@@ -449,6 +458,24 @@ class SEA_plot(object):
         self.current_time = new_val[:-3]
         self.create_matplotlib_fig()
         self.update_bokeh_img_plot_from_fig()
+    
+    def on_date_slider_change(self, attr1, old_val, new_val):
+        '''
+        Event handler for a change in the selected forecast data date.
+        '''
+        print('selected new date {0}'.format(new_val))
+        self.current_time = new_val.strftime('%Y%m%d') + self.current_time[-4:]
+        self.create_matplotlib_fig()
+        self.update_bokeh_img_plot_from_fig()
+    
+    def on_hour_slider_change(self, attr1, old_val, new_val):
+        '''
+        Event handler for a change in the selected forecast data date.
+        '''
+        print('selected new date {0}'.format(new_val))
+        self.current_time = self.current_time[:-4] + '{:02d}00'.format(new_val)
+        self.create_matplotlib_fig()
+        self.update_bokeh_img_plot_from_fig()
         
     def on_type_change(self, attr1, old_val, new_val):
     
@@ -461,8 +488,15 @@ class SEA_plot(object):
         self.create_matplotlib_fig()
         self.update_bokeh_img_plot_from_fig()
         
+    def link_axes_to_other_plot(self, other_plot):
+        try:
+            self.bokeh_figure.x_range = other_plot.bokeh_figure.x_range
+            self.bokeh_figure.y_range = other_plot.bokeh_figure.y_range
+        except:
+            print('bokeh plot linking failed.')        
+        
 # Set the initial values to be plotted
-init_time = '201801100300'
+init_time = '201801091200'
 init_var = 'I'
 
 
@@ -491,6 +525,8 @@ plot_obj_right = SEA_plot(datasets,
 
 plot_obj_right.current_time = init_time
 bokeh_img_right = plot_obj_right.create_plot()
+
+plot_obj_right.link_axes_to_other_plot(plot_obj_left)
 
 plots_row = bokeh.layouts.row(bokeh_img_left,
                               bokeh_img_right)
@@ -521,14 +557,35 @@ data_time_dd = \
 data_time_dd.on_change('value', plot_obj_right.on_data_time_change)
 data_time_dd.on_change('value', plot_obj_left.on_data_time_change)
 
-# Set layout for widgets
-param_row = bokeh.layouts.row(wavelength_dd)
-slider_row = bokeh.layouts.row(data_time_dd)
+start_date = fcast_time_obj.date()
+end_date = (start_date + dt.timedelta(days = 1))
+value_date = dt.datetime.strptime(init_time[:8], '%Y%m%d').date()
 
-main_layout = bokeh.layouts.column(param_row, 
+date_slider = bokeh.models.widgets.sliders.DateSlider(start = start_date,
+                                                      end = end_date,
+                                                      value = value_date,
+                                                      step = 86400000, 
+                                                      title = 'Select hour')
+
+date_slider.on_change('value', plot_obj_left.on_date_slider_change)
+date_slider.on_change('value', plot_obj_right.on_date_slider_change)
+
+hour_slider = bokeh.models.widgets.sliders.Slider(start = 0,
+                                                  end = 21,
+                                                  value = 12,
+                                                  step = 3,
+                                                  title = 'Select hour')
+
+hour_slider.on_change('value', plot_obj_left.on_hour_slider_change)
+hour_slider.on_change('value', plot_obj_right.on_hour_slider_change)
+
+# Set layout for widgets
+dd_row = bokeh.layouts.row(wavelength_dd, data_time_dd)
+slider_row = bokeh.layouts.row(date_slider, hour_slider)
+
+main_layout = bokeh.layouts.column(dd_row, 
                                    slider_row,
-                                   plots_row,
-                                   )
+                                   plots_row)
 
 try:
     bokeh_mode = os.environ['BOKEH_MODE']
@@ -540,5 +597,4 @@ if bokeh_mode == 'server':
 elif bokeh_mode == 'cli':
     bokeh.io.show(main_layout)
 
-# Share axes between plots to enable linked zooming and panning
-#  plot_obj_left.share_axes([plot_obj_right.current_axes])
+bokeh.plotting.curdoc().title = 'Model simulated imagery vs Himawari-8'    

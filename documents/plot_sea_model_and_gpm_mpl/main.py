@@ -284,14 +284,14 @@ class SEA_plot(object):
         self.dataset = dataset
         self.figure_name = figname
         self.current_type = plot_type
-        self.current_config = conf1
+        self.set_config(conf1)
         self.current_region = reg1
         self.data_bounds = region_dict[self.current_region]
-        self.plot_description = self.dataset[self.current_config]['data_type_name']
         self.use_mpl_title = False
         self.show_axis_ticks = False
         self.show_colorbar = False
         self.setup_plot_funcs()
+        self.current_title = ''
 
     def setup_plot_funcs(self):
     
@@ -302,9 +302,12 @@ class SEA_plot(object):
         amount of work to update the plot, and is used for some option changes, mainly a change 
         in the forecast time selected.
         '''
-        
         self.plot_funcs = {'precipitation' : self.plot_precip}
-        
+    
+    def set_config(self, new_config):
+        self.current_config = new_config
+        self.plot_description = self.dataset[self.current_config]['data_type_name']
+    
     def update_coords(self, data_cube):
     
         '''
@@ -390,14 +393,18 @@ class SEA_plot(object):
         '''
         
         self.current_img_array = lib_sea.get_image_array_from_figure(self.current_figure)
-        print('size of image array is {0}'.format(self.current_img_array.shape))
         
-        self.bokeh_figure = bokeh.plotting.figure(plot_width=600, 
-                                                  plot_height=450, 
-                                                  x_range=(90, 154),
-                                                  y_range=(-18, 30), 
-                                                  toolbar_location=None,
+        # Set figure navigation limits
+        x_limits = bokeh.models.Range1d(90, 154, bounds = (90, 154))
+        y_limits = bokeh.models.Range1d(-18, 30, bounds = (-18, 30))
+        
+        # Initialize figure        
+        self.bokeh_figure = bokeh.plotting.figure(plot_width=800, 
+                                                  plot_height=600, 
+                                                  x_range = x_limits,
+                                                  y_range = y_limits, 
                                                   tools = 'pan,wheel_zoom,reset')
+                                                  
         latitude_range = 48
         longitude_range = 64
         self.bokeh_image = self.bokeh_figure.image_rgba(image=[self.current_img_array], 
@@ -416,6 +423,7 @@ class SEA_plot(object):
         '''
         
         self.current_img_array = lib_sea.get_image_array_from_figure(self.current_figure)
+        self.bokeh_figure.title.text = self.current_title
         self.bokeh_img_ds.data[u'image'] = [self.current_img_array]  
         
     def on_data_time_change(self, attr1, old_val, new_val):
@@ -425,7 +433,25 @@ class SEA_plot(object):
         '''
         
         print('selected new time {0}'.format(new_val))
-        self.current_time = new_val
+        self.current_time = int(new_val/3)
+        self.create_matplotlib_fig()
+        self.update_bokeh_img_plot_from_fig()
+
+    def on_date_slider_change(self, attr1, old_val, new_val):
+        '''
+        Event handler for a change in the selected forecast data date.
+        '''
+        print('selected new date {0}'.format(new_val))
+        self.current_time = new_val.strftime('%Y%m%d') + self.current_time[-4:]
+        self.create_matplotlib_fig()
+        self.update_bokeh_img_plot_from_fig()
+    
+    def on_hour_slider_change(self, attr1, old_val, new_val):
+        '''
+        Event handler for a change in the selected forecast data date.
+        '''
+        print('selected new date {0}'.format(new_val))
+        self.current_time = self.current_time[:-4] + '{:02d}00'.format(new_val)
         self.create_matplotlib_fig()
         self.update_bokeh_img_plot_from_fig()
         
@@ -445,12 +471,30 @@ class SEA_plot(object):
         Event handler for a change in the selected model configuration output.
         '''
         print('selected new config {0}'.format(new_val))
-        self.current_config = new_val
+        self.set_config(new_val)
+        self.create_matplotlib_fig()
+        self.update_bokeh_img_plot_from_fig()
+
+    def on_imerg_change(self, attr1, old_val, new_val):
+        '''
+        Event handler for a change in the selected model configuration output.
+        '''
+        imerg_list = [ds_name for ds_name in datasets.keys() 
+                      if 'imerg' in ds_name]
+        print('selected new config {0}'.format(imerg_list[new_val]))
+        self.set_config(imerg_list[new_val])
         self.create_matplotlib_fig()
         self.update_bokeh_img_plot_from_fig()
         
+    def link_axes_to_other_plot(self, other_plot):
+        try:
+            self.bokeh_figure.x_range = other_plot.bokeh_figure.x_range
+            self.bokeh_figure.y_range = other_plot.bokeh_figure.y_range
+        except:
+            print('bokeh plot linking failed.')        
+               
 # Set the initial values to be plotted
-init_time = 4
+init_time = 12
 init_var = 'precipitation'
 init_region = 'se_asia'
 init_model_left = KM4P4_RA1T_KEY
@@ -483,45 +527,71 @@ plot_obj_right = SEA_plot(datasets,
 plot_obj_right.current_time = init_time
 bokeh_img_right = plot_obj_right.create_plot()
 
+plot_obj_right.link_axes_to_other_plot(plot_obj_left)
+
 plots_row = bokeh.layouts.row(bokeh_img_left, bokeh_img_right)
 
 # Set up bokeh widgets
 def create_dropdown_opt_list(iterable1):
     return [(k1,k1) for k1 in iterable1]
 
-num_times = datasets[N1280_GA6_KEY]['precipitation'].shape[0]
+num_times = 3*datasets[GPM_IMERG_LATE_KEY]['precipitation'].shape[0]
     
 data_time_slider = bokeh.models.widgets.Slider(start=0, 
                                                end=num_times, 
                                                value=init_time, 
-                                               step=1, 
-                                               title="Data time")
+                                               step=3, 
+                                               title="Data time",
+                                               width = 800)
                                                
 data_time_slider.on_change('value', plot_obj_right.on_data_time_change)
 data_time_slider.on_change('value', plot_obj_left.on_data_time_change)
+
+'''start_date = fcast_time_obj.date()
+end_date = (start_date + dt.timedelta(days = 3))
+value_date = dt.date.strptime(init_time[:8], '%Y%m%d')
+
+date_slider = bokeh.models.widgets.sliders.DateSlider(start = start_date,
+                                                      end = end_date,
+                                                      value = value_date,
+                                                      step = 86400000, 
+                                                      title = 'Select hour')
+
+date_slider.on_change('value', plot_obj_left.on_date_slider_change)
+date_slider.on_change('value', plot_obj_right.on_date_slider_change)
+
+hour_slider = bokeh.models.widgets.sliders.Slider(start = 0,
+                                                  end = 21,
+                                                  value = 12,
+                                                  step = 3,
+                                                  title = 'Select hour')
+
+hour_slider.on_change('value', plot_obj_left.on_hour_slider_change)
+hour_slider.on_change('value', plot_obj_right.on_hour_slider_change)'''
 
 model_menu_list = create_dropdown_opt_list([ds_name for ds_name in datasets.keys() 
                                             if 'imerg' not in ds_name])
 gpm_imerg_menu_list = create_dropdown_opt_list([ds_name for ds_name in datasets.keys() 
                                                 if 'imerg' in ds_name])
 
-left_desc = 'Model display'
-left_dd = bokeh.models.widgets.Dropdown(menu = model_menu_list,
-                                        label = left_desc,
-                                        button_type = 'warning')
-left_dd.on_change('value', plot_obj_left.on_config_change,)
+model_dd_desc = 'Model display'
+model_dd = bokeh.models.widgets.Dropdown(menu = model_menu_list,
+                                         label = model_dd_desc,
+                                         button_type = 'warning',
+                                         width = 800)
+model_dd.on_change('value', plot_obj_left.on_config_change,)
 
-
-right_desc = 'GPM IMERG display'
-right_dd = bokeh.models.widgets.Dropdown(menu = gpm_imerg_menu_list, 
-                                         label = right_desc,
-                                         button_type = 'warning')
-right_dd.on_change('value', plot_obj_right.on_config_change)
+imerg_rbg = bokeh.models.widgets.RadioButtonGroup(labels = [ds_name for ds_name 
+                                                           in datasets.keys() 
+                                                           if 'imerg' in ds_name], 
+                                                 button_type = 'warning',
+                                                 width = 800)
+imerg_rbg.on_change('active', plot_obj_right.on_imerg_change)
                                 
                               
 # Set layout for widgets
 slider_row = bokeh.layouts.row(data_time_slider)
-config_row = bokeh.layouts.row(left_dd, right_dd)
+config_row = bokeh.layouts.row(model_dd, imerg_rbg, width = 1600)
 
 main_layout = bokeh.layouts.column(slider_row,
                                    config_row,
@@ -537,3 +607,5 @@ if bokeh_mode == 'server':
     bokeh.plotting.curdoc().add_root(main_layout)
 elif bokeh_mode == 'cli':
     bokeh.io.show(main_layout)
+    
+bokeh.plotting.curdoc().title = 'Model rainfall vs GPM app'    

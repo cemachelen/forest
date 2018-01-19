@@ -1,7 +1,6 @@
 import os
 import time
 import sys
-import urllib.request
 import textwrap
 import numpy
 import iris
@@ -85,7 +84,10 @@ if do_download:
            
     
     for ds_name in datasets:
-        lib_sea.download_from_s3(datasets[ds_name]['s3_url'], datasets[ds_name]['local_path'])
+        try:
+            lib_sea.download_from_s3(datasets[ds_name]['s3_url'], datasets[ds_name]['local_path'])
+        except:
+            print("    Warning: file not downloaded successfully:", datasets[ds_name]['s3_url'])
         
     fname_key = 'local_path'
     
@@ -233,6 +235,8 @@ bokeh_img_right = plot_obj_right.create_plot()
 plots_row = bokeh.layouts.row(bokeh_img_left,
                               bokeh_img_right)
 
+plot_obj_right.link_axes_to_other_plot(plot_obj_left)
+
 # set up bokeh widgets
 def create_dropdown_opt_list(iterable1):
     return [(k1,k1) for k1 in iterable1]
@@ -306,7 +310,4 @@ if bokeh_mode == 'server':
 elif bokeh_mode == 'cli':
     bokeh.io.show(main_layout)
     
-# Share axes between plots to enable linked zooming and panning
-#plot_obj_left.share_axes([plot_obj_right.current_axes])
-
-
+bokeh.plotting.curdoc().title = 'Two model comparison'    
