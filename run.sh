@@ -1,5 +1,6 @@
 #! /bin/bash
-pysssix /s3 >/dev/null 2>&1 &
+mkdir -p /s3/stephen-sea-public-london
+goofys /s3/stephen-sea-public-london stephen-sea-public-london
 
 if [ -z "$PUBLIC_IP" ]
 then

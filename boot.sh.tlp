@@ -16,9 +16,10 @@ pip install toolz
 pip install https://github.com/SciTools/iris/archive/v2.0.x.zip
 pip install numpy --upgrade
 
-# pysssix stuff
-pip install git+git://github.com/met-office-lab/pysssix.git
-mkdir /s3
+# goofys stuff
+wget -O goofys https://github.com/kahing/goofys/releases/download/v0.19.0/goofys
+chmod uog+x goofys 
+mv goofys /usr/bin/
 
 # TODO use a differnet user rather than root.
 
