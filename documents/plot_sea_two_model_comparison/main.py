@@ -10,6 +10,7 @@ import bokeh.io
 import bokeh.layouts 
 import bokeh.models.widgets
 import bokeh.plotting
+import datetime
 
 
 import matplotlib
@@ -27,6 +28,9 @@ try:
 except:
     is_notebook = False
 
+from uuid import uuid4 as uuid
+
+bokeh.plotting.curdoc().session_id = uuid().hex
 
 # Extract and Load
 bucket_name = 'stephen-sea-public-london'
@@ -39,6 +43,11 @@ KM4P4_RA1T_KEY = 'km4p4_ra1t'
 KM1P5_INDO_RA1T_KEY = 'indon2km1p5_ra1t'
 KM1P5_MAL_RA1T_KEY = 'mal2km1p5_ra1t'
 KM1P5_PHI_RA1T_KEY = 'phi2km1p5_ra1t'
+
+try:
+    print(">>> have data sets: " % datasets)
+except NameError as e:
+    print(">>> datasets doesn't exist")
 
 datasets = {N1280_GA6_KEY:{'model_name':'N1280 GA6 LAM Model'},
             KM4P4_RA1T_KEY:{'model_name':'SE Asia 4.4KM RA1-T '},
@@ -274,6 +283,7 @@ right_model_dd = bokeh.models.widgets.Dropdown(menu=dataset_menu_list,
                                              label=right_model_desc,
                                              button_type='warning')
 right_model_dd.on_change('value', plot_obj_right.on_config_change)
+right_model_dd.on_change('value', lambda a,b,c :print(">>> " + bokeh.plotting.curdoc().myid))
 
 # layout widgets
 param_row = bokeh.layouts.row(model_var_dd, region_dd)

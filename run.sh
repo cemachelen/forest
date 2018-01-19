@@ -3,7 +3,7 @@ pysssix /s3 >/dev/null 2>&1 &
 
 if [ -z "$PUBLIC_IP" ]
 then
-    bokeh serve --port 8888 /opt/documents/*
+    bokeh serve --port 8888 /opt/model_evaluation_tool/documents/*
 else
-    bokeh serve --allow-websocket-origin $PUBLIC_IP:8888 --port 8888 /opt/documents/*
+    bokeh serve  --host $PUBLIC_IP:8888 --allow-websocket-origin $PUBLIC_IP:8888 --port 8888 /opt/model_evaluation_tool/documents/*
 fi

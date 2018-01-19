@@ -18,6 +18,9 @@ import bokeh.io
 import bokeh.layouts 
 import bokeh.models.widgets
 import bokeh.plotting
+from uuid import uuid4 as uuid
+
+print(">>> Run see plot!")
 
 class SEA_plot(object):
     '''
@@ -29,6 +32,7 @@ class SEA_plot(object):
         '''
         Initialisation function for SEA_plot class
         '''
+        self.id = uuid().hex
         self.region_dict = rd1
         self.main_plot = None
         self.current_time = 0
@@ -376,6 +380,15 @@ class SEA_plot(object):
         '''
         cloud_cube = self.dataset[self.current_config][self.current_var]
         self.update_coords(cloud_cube)
+
+        print(self.coords_long, 
+                                                      self.coords_lat, 
+                                                      cloud_cube[self.current_time].data,
+                                                      self.plot_options[self.current_var]['cmap'],
+                                                      self.plot_options[self.current_var]['norm'])
+
+
+
         self.main_plot = self.current_axes.pcolormesh(self.coords_long, 
                                                       self.coords_lat, 
                                                       cloud_cube[self.current_time].data,
@@ -410,6 +423,7 @@ class SEA_plot(object):
         Main plotting function. Generic elements of the plot are created here, and then the plotting
         function for the specific variable is called using the self.plot_funcs dictionary.
         '''
+        
         self.create_matplotlib_fig()
         self.create_bokeh_img_plot_from_fig()
         
@@ -459,6 +473,7 @@ class SEA_plot(object):
         self.bokeh_img_ds = self.bokeh_image.data_source
         
     def update_bokeh_img_plot_from_fig(self):
+        print(">>> do plot from %s" % self.id)
         self.current_img_array = lib_sea.get_image_array_from_figure(self.current_figure)
         self.bokeh_img_ds.data[u'image'] = [self.current_img_array]
 

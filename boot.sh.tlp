@@ -1,11 +1,32 @@
 #!/bin/bash
 yum update -y
-yum install -y git
-yum -y install docker
-service docker start
-mkdir -p /opt/met
+yum install -y fuse-devel fuse git
+
+wget http://repo.continuum.io/miniconda/Miniconda3-3.7.0-Linux-x86_64.sh -O ~/miniconda.sh
+bash ~/miniconda.sh -b -p /root/miniconda
+export PATH="/root/miniconda/bin:$PATH"
+echo "export PATH=\"/root/miniconda/bin:$PATH\"" >> ~/.bashrc
+conda update conda
+
+
+
+# Librarys
+conda install -c conda-forge boto3 cartopy cf_units bokeh pyke --yes
+pip install toolz
+pip install https://github.com/SciTools/iris/archive/v2.0.x.zip
+pip install numpy --upgrade
+
+# pysssix stuff
+pip install git+git://github.com/met-office-lab/pysssix.git
+mkdir /s3
+
+# TODO use a differnet user rather than root.
+
 cd /opt/
 git clone https://github.com/met-office-lab/model_evaluation_tool.git
 cd model_evaluation_tool
-docker build  -t met .
-docker run  --restart always -p 8888:8888 --cap-add SYS_ADMIN --device /dev/fuse  -v $(pwd)/documents:/opt/documents -e  PUBLIC_IP=$(curl http://169.254.169.254/latest/meta-data/public-ipv4) met
+git checkout refactor
+
+
+export PUBLIC_IP=$(curl http://169.254.169.254/latest/meta-data/public-ipv4)
+./run.sh
