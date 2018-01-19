@@ -1,6 +1,6 @@
 #! /bin/bash
 mkdir -p /s3/stephen-sea-public-london
-goofys /s3/stephen-sea-public-london stephen-sea-public-london
+goofys stephen-sea-public-london /s3/stephen-sea-public-london
 
 if [ -z "$PUBLIC_IP" ]
 then
