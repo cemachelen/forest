@@ -7,6 +7,8 @@ import bokeh.plotting
 from bokeh.layouts import widgetbox, Row, Column
 from bokeh.models.widgets import RadioButtonGroup
 from functools import partial
+from bokeh.events import PanEnd, MouseWheel, PlotEvent, SelectionGeometry
+
 
 logger = logging.getLogger('sea_refactor')
 logger.setLevel(logging.DEBUG)
@@ -69,6 +71,9 @@ left_vis = vis.CubePlot()
 right_vis = vis.CubePlot(x_range=left_vis.x_range, y_range=left_vis.y_range)
 
 
+
+def callback(event):
+    print('Python:Click, %r' % event)
 
 update_plot_from_state(bokeh.plotting.curdoc().app_state)
 bokeh.plotting.curdoc().add_root(

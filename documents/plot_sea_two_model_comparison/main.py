@@ -1,3 +1,7 @@
+import ptvsd
+ptvsd.enable_attach('my_secret')
+
+
 import os
 import time
 import sys
@@ -247,8 +251,12 @@ model_var_dd = \
     bokeh.models.widgets.Dropdown(label=model_var_list_desc,
                                   menu=create_dropdown_opt_list(plot_names),
                                   button_type='warning')
-model_var_dd.on_change('value',plot_obj_left.on_var_change)
-model_var_dd.on_change('value',plot_obj_right.on_var_change)
+
+def on_var_change(attr, old, new):
+    plot_obj_left.on_var_change(attr, old, new)
+    plot_obj_right.on_var_change(attr, old, new)
+
+model_var_dd.on_change('value',on_var_change)
 
 num_times = datasets[N1280_GA6_KEY]['precipitation'].shape[0]
 for ds_name in datasets:
@@ -261,8 +269,13 @@ data_time_slider = bokeh.models.widgets.Slider(start=0,
                                                step=1, 
                                                title="Data time")
                                                
-data_time_slider.on_change('value',plot_obj_right.on_data_time_change)
-data_time_slider.on_change('value',plot_obj_left.on_data_time_change)
+
+
+def on_data_time_change(attr, old, new):
+    plot_obj_right.on_data_time_change(attr, old, new)
+    plot_obj_left.on_data_time_change(attr, old, new)
+
+data_time_slider.on_change('value', on_data_time_change)
 
 region_desc = 'Region'
 
@@ -270,8 +283,12 @@ region_menu_list = create_dropdown_opt_list(region_dict.keys())
 region_dd = bokeh.models.widgets.Dropdown(menu=region_menu_list, 
                                           label=region_desc,
                                           button_type='warning')
-region_dd.on_change('value', plot_obj_right.on_region_change)
-region_dd.on_change('value', plot_obj_left.on_region_change)
+                                        
+def on_region_change(attr, old, new):
+    plot_obj_right.on_region_change(attr, old, new)
+    plot_obj_left.on_region_change(attr, old, new)
+
+region_dd.on_change('value', on_region_change)
 
 dataset_menu_list = create_dropdown_opt_list(datasets.keys())
 left_model_desc = 'Left display'

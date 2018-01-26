@@ -513,6 +513,7 @@ class SEA_plot(object):
         Event handler for a change in the selected forecast data time.
         '''
         print('selected new time {0}'.format(new_val))
+        print(self.id, self.current_var,)
         self.current_time = new_val
         self.update_plot()
         

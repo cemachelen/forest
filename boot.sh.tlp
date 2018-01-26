@@ -11,7 +11,7 @@ conda update conda
 
 
 # Librarys
-conda install -c conda-forge boto3 cartopy cf_units bokeh pyke --yes
+conda install -c conda-forge boto3 cartopy cf_units bokeh pyke nodejs --yes
 pip install toolz
 pip install https://github.com/SciTools/iris/archive/v2.0.x.zip
 pip install numpy --upgrade

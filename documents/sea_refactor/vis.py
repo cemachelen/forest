@@ -15,6 +15,9 @@ import bokeh.plotting
 
 import random
 
+from bokeh.events import PanEnd #TODO: Also need MouseWheel to capture zoom.
+
+
 logger = logging.getLogger('sea_refactor')
 logger.setLevel(logging.DEBUG)
 
@@ -30,8 +33,22 @@ class CubePlot(bokeh.plotting.Figure):
         super().__init__(**kwargs)
         self.__source = bokeh.plotting.ColumnDataSource(data=dict(x=[],y=[],dw=[],dh=[],image=[]))
         self.image_rgba(image='image',source=self.__source,x='x',y='y',dw='dw',dh='dh')
-    
+        self.on_event(PanEnd, self.resize)
+        self.__orig_cube = None
+
+    def resize(self, event):
+        logger.debug("resize: %s, %s", event.x, event.y)
+        logger.debug("resize range, scale, axis: %s, %s, %s", self.x_range, self.x_scale, self.xaxis)
+        if self.__orig_cube:
+            new_cube = self.__orig_cube.extract(latitude=(), longitude=())
+            self._update_plot_from_cube(new_cube)
+        
+        
     def update_plot(self, cube2d):
+        self.__orig_cube = cube2d
+        self._update_plot_from_cube(cube2d)
+
+    def _update_plot_from_cube(self, cube2d):
         img = make_plot_img(cube2d)
         x = cube2d.coords('longitude')[0].points
         y = cube2d.coords('latitude')[0].points
