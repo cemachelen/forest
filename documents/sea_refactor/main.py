@@ -8,7 +8,11 @@ from bokeh.layouts import widgetbox, Row, Column
 from bokeh.models.widgets import RadioButtonGroup
 from functools import partial
 from bokeh.events import PanEnd, MouseWheel, PlotEvent, SelectionGeometry
+from functools import partial
+from threading import Thread
+from bokeh.document import without_document_lock
 
+doc = bokeh.plotting.curdoc()
 
 logger = logging.getLogger('sea_refactor')
 logger.setLevel(logging.DEBUG)
@@ -29,16 +33,25 @@ models = [
 
 
 # Attach state to the current doc. The state dictates we plot.
-bokeh.plotting.curdoc().app_state =  state = {'left_model': 0, 'right_model':1, 'var':0,'time': 0,'region':0}
+doc.app_state =  state = {'left_model': 0, 'right_model':1, 'var':0,'time': 0,'region':0}
 
-def state_change(state_prop, val):
-    state = bokeh.plotting.curdoc().app_state
+
+
+ def state_change(state_prop, val):
+    state = doc.app_state
     state[state_prop] = val
     update_plot_from_state(state)
 
-def update_plot_from_state(state):
-    update_plot(left_vis,'left_model', state)
-    update_plot(right_vis,'right_model', state)
+@without_document_lock
+async def update_plot_from_state(state):
+    thread = Thread(target=partial(update_plot, left_vis,'left_model', state ))
+    thread.start()
+    thread = Thread(target=partial(update_plot, right_vis,'right_model', state ))
+    thread.start()
+
+
+    # update_plot(left_vis,'left_model', state)
+    # update_plot(right_vis,'right_model', state)
 
 def update_plot(plot, model, state):
     model = models[state[model]]
@@ -46,11 +59,10 @@ def update_plot(plot, model, state):
     t_fcst = fcast_times[state['time']]
     cube2d = da.get_data(model['bucket'], model['conf'], var_names[state['var']], 
                         t_fcst, region['latitude'], region['longitude'])
-    plot.update_plot(cube2d)    
-
-
     
-
+    
+    doc.add_next_tick_callback(partial(plot.update_plot, cube2d))
+    
 
 # Build the UI
 
@@ -75,8 +87,9 @@ right_vis = vis.CubePlot(x_range=left_vis.x_range, y_range=left_vis.y_range)
 def callback(event):
     print('Python:Click, %r' % event)
 
-update_plot_from_state(bokeh.plotting.curdoc().app_state)
-bokeh.plotting.curdoc().add_root(
+
+update_plot_from_state(doc.app_state)
+doc.add_root(
     Column(
         Row(
                 vars_select,
