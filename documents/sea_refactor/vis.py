@@ -8,14 +8,16 @@ import cartopy
 import cartopy.crs
 import cartopy.io.img_tiles
 import logging
-
+import datetime
 import numpy
 
 import bokeh.plotting
 
 import random
-
+from functools import partial
 from bokeh.events import PanEnd #TODO: Also need MouseWheel to capture zoom.
+
+from functools import lru_cache
 
 
 logger = logging.getLogger('sea_refactor')
@@ -33,6 +35,7 @@ class CubePlot(bokeh.plotting.Figure):
         super().__init__(**kwargs)
         self.__source = bokeh.plotting.ColumnDataSource(data=dict(x=[],y=[],dw=[],dh=[],image=[]))
         self.image_rgba(image='image',source=self.__source,x='x',y='y',dw='dw',dh='dh')
+
         self.on_event(PanEnd, self.resize)
         self.__orig_cube = None
 
@@ -65,11 +68,20 @@ class CubePlot(bokeh.plotting.Figure):
         self.x_range.end = x[-1]
         self.y_range.start = y[0]
         self.y_range.end = y[-1]
+        if self._document:
+            self._document.add_next_tick_callback(partial(self._update_range,x[0],x[-1],y[0],y[-1]))
+
+    def _update_range(self,x_start, x_end, y_start, y_end):
+        self.x_range.start = x_start
+        self.x_range.end = x_end
+        self.y_range.start = y_start
+        self.y_range.end = y_end
 
 
-
+@lru_cache(32) # TODO: are reling on the fact that cube objects are being cached or are we hashing on metadata?
 def make_plot_img(cube2d):
-    fig = matplotlib.pyplot.figure("My Fig", figsize=(4.0,3.0))
+    s = datetime.datetime.now()
+    fig = matplotlib.pyplot.figure("My Fig", figsize=(4.0,3.0), dpi=300)
     fig.clf()
     current_axes = fig.add_subplot(111, projection=cartopy.crs.PlateCarree())
     current_axes.set_position([0, 0, 1, 1])
@@ -100,4 +112,5 @@ def make_plot_img(cube2d):
     # canvas.tostring_argb give pixmap in ARGB mode. Roll the ALPHA channel to have it in RGBA mode
     buf = numpy.roll ( buf, 3, axis = 2 )
     buf = numpy.flip(buf,axis=0)
+    logger.info('make_plot_img took %s' % (datetime.datetime.now() - s))
     return buf

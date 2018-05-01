@@ -6,11 +6,18 @@ import vis
 import bokeh.plotting
 from bokeh.layouts import widgetbox, Row, Column
 from bokeh.models.widgets import RadioButtonGroup
-from functools import partial
 from bokeh.events import PanEnd, MouseWheel, PlotEvent, SelectionGeometry
 from functools import partial
 from threading import Thread
 from bokeh.document import without_document_lock
+from uuid import uuid4 as uuid
+from tornado import gen
+import copy
+from spinners import Spinner
+from concurrent.futures import ThreadPoolExecutor
+executor = ThreadPoolExecutor(max_workers=4)
+
+
 
 doc = bokeh.plotting.curdoc()
 
@@ -33,39 +40,49 @@ models = [
 
 
 # Attach state to the current doc. The state dictates we plot.
-doc.app_state =  state = {'left_model': 0, 'right_model':1, 'var':0,'time': 0,'region':0}
+doc.app_state = state = {'left_model': 0, 'right_model':1, 'var':0,'time': 0,'region':0}
 
 
 
- def state_change(state_prop, val):
-    state = doc.app_state
-    state[state_prop] = val
-    update_plot_from_state(state)
+
+@gen.coroutine
+def state_change(state_prop, val):
+    print('state change', state_prop, val)
+    doc.app_state[state_prop] = val
+    return do_a_update()
+
+@gen.coroutine  
+def do_a_update():
+    print('update')
+    spinner.show()
+    update_id = uuid().hex
+    doc.app_state['pending_update'] = update_id
+    data = yield executor.submit(get_plot_data, update_id, copy.deepcopy(doc.app_state))
+    if data['update_id'] == doc.app_state['pending_update']: # TODO: Is this needed. could we get out of sync if multiple fast interactions?
+        doc.add_next_tick_callback(partial(update_plots, data))
+
 
 @without_document_lock
-async def update_plot_from_state(state):
-    thread = Thread(target=partial(update_plot, left_vis,'left_model', state ))
-    thread.start()
-    thread = Thread(target=partial(update_plot, right_vis,'right_model', state ))
-    thread.start()
+def get_plot_data(update_id, state):
+    result = {}
+    for model_key in ['left_model', 'right_model']:
+        model = models[state[model_key]]
+        region = regions[state['region']]
+        t_fcst = fcast_times[state['time']]
+        cube2d = da.get_data(model['bucket'], model['conf'], var_names[state['var']], 
+                            t_fcst, region['latitude'], region['longitude'])
+        result[model_key] = cube2d
+    result['update_id'] = update_id    
+    return result
 
-
-    # update_plot(left_vis,'left_model', state)
-    # update_plot(right_vis,'right_model', state)
-
-def update_plot(plot, model, state):
-    model = models[state[model]]
-    region = regions[state['region']]
-    t_fcst = fcast_times[state['time']]
-    cube2d = da.get_data(model['bucket'], model['conf'], var_names[state['var']], 
-                        t_fcst, region['latitude'], region['longitude'])
-    
-    
-    doc.add_next_tick_callback(partial(plot.update_plot, cube2d))
-    
+def update_plots(data):
+    left_vis.update_plot(data['left_model'])
+    right_vis.update_plot(data['right_model'])
+    spinner.hide()
 
 # Build the UI
-
+spinner = Spinner()
+spinner.hide()
 vars_select = RadioButtonGroup(labels=var_names, active=state['var'])
 vars_select.on_click(partial(state_change, 'var'))
 
@@ -79,21 +96,18 @@ right_model_select = RadioButtonGroup(labels=[m['name'] for m in models], active
 right_model_select.on_click(partial(state_change, 'right_model'))
 
 
-left_vis = vis.CubePlot()
-right_vis = vis.CubePlot(x_range=left_vis.x_range, y_range=left_vis.y_range)
+left_vis = vis.CubePlot(width=800, height=600)
+right_vis = vis.CubePlot(width=800, height=600, x_range=left_vis.x_range, y_range=left_vis.y_range)
 
 
-
-def callback(event):
-    print('Python:Click, %r' % event)
-
-
-update_plot_from_state(doc.app_state)
+do_a_update()
 doc.add_root(
     Column(
         Row(
+                spinner,
                 vars_select,
                 region_select
+                
         ),
         Row( 
             Column(left_model_select, left_vis),
