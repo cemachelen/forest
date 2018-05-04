@@ -47,13 +47,13 @@ doc.app_state = state = {'left_model': 0, 'right_model':1, 'var':0,'time': 0,'re
 
 @gen.coroutine
 def state_change(state_prop, val):
-    print('state change', state_prop, val)
+    logger.info('state change', state_prop, val)
     doc.app_state[state_prop] = val
     return do_a_update()
 
 @gen.coroutine  
 def do_a_update():
-    print('update')
+    logger.info('do_a_update')
     spinner.show()
     update_id = uuid().hex
     doc.app_state['pending_update'] = update_id
@@ -82,7 +82,7 @@ def update_plots(data):
 
 # Build the UI
 spinner = Spinner()
-spinner.hide()
+spinner.show()
 vars_select = RadioButtonGroup(labels=var_names, active=state['var'])
 vars_select.on_click(partial(state_change, 'var'))
 
@@ -100,7 +100,7 @@ left_vis = vis.CubePlot(width=800, height=600)
 right_vis = vis.CubePlot(width=800, height=600, x_range=left_vis.x_range, y_range=left_vis.y_range)
 
 
-do_a_update()
+
 doc.add_root(
     Column(
         Row(
@@ -115,3 +115,6 @@ doc.add_root(
         )
     )
 )
+
+doc.add_timeout_callback(do_a_update, 5000)
+logger.info('done')

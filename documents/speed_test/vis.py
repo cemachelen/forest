@@ -81,7 +81,7 @@ class CubePlot(bokeh.plotting.Figure):
 @lru_cache(32) # TODO: are reling on the fact that cube objects are being cached or are we hashing on metadata?
 def make_plot_img(cube2d):
     s = datetime.datetime.now()
-    fig = matplotlib.pyplot.figure("My Fig", figsize=(4.0,3.0), dpi=300)
+    fig = matplotlib.pyplot.figure("My Fig", figsize=(4.0,3.0), dpi=200)
     fig.clf()
     current_axes = fig.add_subplot(111, projection=cartopy.crs.PlateCarree())
     current_axes.set_position([0, 0, 1, 1])

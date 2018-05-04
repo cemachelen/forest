@@ -12,8 +12,8 @@ spec:
     spec:
       containers:
         - image: informaticslab/singleuser-notebook:0.3.0
-          command: ["bash"]
-          args: ["-c",". /github_repos/forest/forest_lib/run_forest_server.sh /s3 {{.Values.manager.port}} /github_repos/forest/bokeh_apps/"]
+          command: ["bokeh"]
+          args: ["serve","--port", "{{.Values.manager.port}}", "--allow-websocket-origin={{ .Values.manager.domain }}", "{{ .Values.manager.app_mount_path}}"]
 
           name: {{ .Values.manager.name }}
           ports:
@@ -30,21 +30,17 @@ spec:
               value: {{ .Values.manager.domain }}
 
           volumeMounts:
-            - mountPath: /github_repos/
-              name: git-volume
+            - mountPath: {{ .Values.manager.app_mount_path}}
+              name: demoapp
 
 
             - name: goofys-forest
               mountPath: /s3/stephen-sea-public-london/
 
       volumes:
-        - name: git-volume
-          gitRepo:
-            repository: "https://github.com/informatics-lab/forest.git"
-            revision: "HEAD"
-
-
-
+        - name: demoapp
+          configMap:
+            name: demoapp
 
         - name: goofys-forest
           flexVolume:
@@ -54,3 +50,12 @@ spec:
               bucket: "stephen-sea-public-london"
               dirMode: "0755"
               fileMode: "0777"
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: demoapp
+data:
+{{ (.Files.Glob "documents/speed_test/*.py").AsConfig | indent 2 }}
+---
