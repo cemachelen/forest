@@ -18,8 +18,10 @@ import forest.util
 import forest.data
 
 import iris.analysis
+from forest.errors import NoDataError
 
-BOKEH_TOOLS_LIST = ['pan','wheel_zoom','reset','save','box_zoom','hover']
+BOKEH_TOOLS_LIST = ['pan', 'wheel_zoom', 'reset', 'save', 'box_zoom', 'hover']
+
 
 class MissingDataError(Exception):
     def __init__(self, config, var, time):
@@ -54,7 +56,6 @@ class ForestPlot(object):
                  app_path,
                  init_time,
                  bokeh_figure=None):
-
         '''Initialisation function for ForestPlot class
         '''
 
@@ -89,14 +90,11 @@ class ForestPlot(object):
         self.colorbar_widget = None
 
         self.current_figsize = (8.0, 6.0)
-        self.bokeh_fig_size = (800,600)
+        self.bokeh_fig_size = (800, 600)
         self.coast_res = '50m'
         self.display_mode = ForestPlot.MODE_LOADING
 
-
-
     def _set_config_value(self, new_config):
-
         '''
 
         '''
@@ -106,7 +104,6 @@ class ForestPlot(object):
             self.current_config]['data_type_name']
 
     def setup_pressure_labels(self):
-
         '''Create dict of pressure levels, to be used labelling MSLP contour
         plots.
 
@@ -118,7 +115,6 @@ class ForestPlot(object):
                 pressure1] = '{0:d}hPa'.format(int(pressure1))
 
     def setup_plot_funcs(self):
-
         '''Set up dictionary of plot functions. This is used by the main
         create_plot() function to call the plotting function relevant to the
         specific variable being plotted. There is also a second dictionary
@@ -165,13 +161,12 @@ class ForestPlot(object):
                              'V': self.update_sat_simim_imagery,
                              'blank': self.create_blank,
                              }
-        self.stats_data_var = dict([(k1,k1) for k1 in self.plot_funcs.keys()])
+        self.stats_data_var = dict([(k1, k1) for k1 in self.plot_funcs.keys()])
         self.stats_data_var['wind_vectors'] = forest.data.WIND_SPEED_NAME
         self.stats_data_var['wind_mslp'] = forest.data.WIND_SPEED_NAME
         self.stats_data_var['wind_streams'] = forest.data.WIND_SPEED_NAME
 
     def update_coords(self, data_cube):
-
         '''Update the latitude and longitude coordinates for the data.
 
         '''
@@ -180,7 +175,6 @@ class ForestPlot(object):
         self.coords_long = data_cube.coords('longitude')[0].points
 
     def create_blank(self):
-
         '''
 
         '''
@@ -192,14 +186,13 @@ class ForestPlot(object):
         config_data = self.dataset[self.current_config]['data']
         if var_name:
             data_cube = config_data.get_data(var_name=var_name,
-                                 selected_time = self.current_time)
+                                             selected_time=self.current_time)
         else:
             data_cube = config_data.get_data(var_name=self.current_var,
                                              selected_time=self.current_time)
         return data_cube
 
     def update_precip(self):
-
         '''Update function for precipitation plots, called by update_plot() when
         precipitation is the selected plot type.
 
@@ -211,7 +204,6 @@ class ForestPlot(object):
         self.update_stats(data_cube)
 
     def plot_precip(self):
-
         '''Function for creating precipitation plots, called by create_plot when
         precipitation is the selected plot type.
 
@@ -233,7 +225,6 @@ class ForestPlot(object):
         self.update_stats(data_cube)
 
     def update_wind_vectors(self):
-
         '''Update function for wind vector plots, called by update_plot() when
         wind vectors is the selected plot type.
 
@@ -251,7 +242,6 @@ class ForestPlot(object):
                                  wv_v_data)
 
     def plot_wind_vectors(self):
-
         '''Function for creating wind vector plots, called by create_plot when
         wind vectors is the selected plot type.
 
@@ -295,7 +285,6 @@ class ForestPlot(object):
         self.update_stats(wind_speed_cube)
 
     def update_wind_mslp(self):
-
         '''Update function for wind speed with MSLP contours plots, called by
         update_plot() when wind speed with MSLP is the selected plot type.
 
@@ -322,7 +311,6 @@ class ForestPlot(object):
         self.update_stats(wind_speed_cube)
 
     def plot_wind_mslp(self):
-
         '''Function for creating wind speed with MSLP contour plots, called by
         create_plot when wind speed with MSLP contours is the selected plot
         type.
@@ -366,7 +354,6 @@ class ForestPlot(object):
         self.update_title(wind_speed_cube)
 
     def update_wind_streams(self):
-
         '''Update function for wind streamline plots, called by update_plot()
         when wind streamlines is the selected plot type.
 
@@ -400,7 +387,6 @@ class ForestPlot(object):
         self.update_stats(wind_speed_cube)
 
     def plot_wind_streams(self):
-
         '''Function for creating wind streamline plots, called by create_plot when
         wind streamlines is the selected plot type.
 
@@ -442,9 +428,7 @@ class ForestPlot(object):
         self.update_title(wind_speed_cube)
         self.update_stats(wind_speed_cube)
 
-
     def update_air_temp(self):
-
         '''Update function for air temperature plots, called by update_plot() when
         air temperature is the selected plot type.
 
@@ -457,7 +441,6 @@ class ForestPlot(object):
         self.update_stats(at_cube)
 
     def plot_air_temp(self):
-
         '''Function for creating air temperature plots, called by create_plot when
         air temperature is the selected plot type.
 
@@ -486,7 +469,6 @@ class ForestPlot(object):
         self.update_stats(at_cube)
 
     def update_mslp(self):
-
         '''Update function for MSLP plots, called by update_plot() when
         MSLP is the selected plot type.
 
@@ -498,7 +480,6 @@ class ForestPlot(object):
         self.update_stats(ap_cube)
 
     def plot_mslp(self):
-
         '''Function for creating MSLP plots, called by create_plot when
         MSLP is the selected plot type.
 
@@ -527,7 +508,6 @@ class ForestPlot(object):
         self.update_stats(ap_cube)
 
     def update_cloud(self):
-
         '''Update function for cloud fraction plots, called by update_plot() when
         cloud fraction is the selected plot type.
 
@@ -540,7 +520,6 @@ class ForestPlot(object):
         self.update_stats(cloud_cube)
 
     def plot_cloud(self):
-
         '''Function for creating cloud fraction plots, called by create_plot when
         cloud fraction is the selected plot type.
 
@@ -569,7 +548,6 @@ class ForestPlot(object):
         self.update_stats(cloud_cube)
 
     def update_him8(self):
-
         '''Update function for himawari-8 image plots, called by update_plot()
         when cloud fraction is the selected plot type.
 
@@ -586,7 +564,6 @@ class ForestPlot(object):
         self.update_title(None)
 
     def plot_him8(self):
-
         '''Function for creating himawari-8 image plots, called by create_plot()
         when cloud fraction is the selected plot type.
 
@@ -619,7 +596,6 @@ class ForestPlot(object):
         self.update_title(None)
 
     def update_simim(self):
-
         '''Update function for himawari-8 image plots, called by update_plot()
         when cloud fraction is the selected plot type.
 
@@ -632,7 +608,6 @@ class ForestPlot(object):
         self.update_title(None)
 
     def plot_simim(self):
-
         '''Function for creating himawari-8 image plots, called by create_plot()
         when cloud fraction is the selected plot type.
 
@@ -669,7 +644,6 @@ class ForestPlot(object):
         self.update_title(None)
 
     def update_sat_simim_imagery(self):
-
         '''
 
         '''
@@ -680,7 +654,6 @@ class ForestPlot(object):
             self.update_simim()
 
     def plot_sat_simim_imagery(self):
-
         '''
 
         '''
@@ -691,7 +664,6 @@ class ForestPlot(object):
             self.plot_simim()
 
     def update_stats(self, current_cube):
-
         '''
 
         '''
@@ -721,12 +693,11 @@ class ForestPlot(object):
             else:
                 long_str = '{0:.2f} W'.format(abs(self.selected_point[1]))
 
-
             sample_pts = [('latitude', self.selected_point[0]),
                           ('longitude', self.selected_point[1])]
             select_val_cube = \
                 current_cube.interpolate(sample_pts,
-                                            iris.analysis.Linear())
+                                         iris.analysis.Linear())
 
             select_val = float(select_val_cube.data)
 
@@ -740,8 +711,7 @@ class ForestPlot(object):
                                                        long=long_str,
                                                        fv=field_val_str)
 
-
-        stats_str_list += [model_run_info,'']
+        stats_str_list += [model_run_info, '']
         stats_str_list += [selected_pt_info, '']
         stats_str_list += ['Max = {0:.4f} {1}'.format(max_val, unit_str)]
         stats_str_list += ['Min = {0:.4f} {1}'.format(min_val, unit_str)]
@@ -752,7 +722,6 @@ class ForestPlot(object):
         self.stats_string = '</br>'.join(stats_str_list)
 
     def update_title(self, current_cube):
-
         '''Update plot title.
 
         '''
@@ -767,30 +736,30 @@ class ForestPlot(object):
                 var_name=self.current_var,
                 fcst_time=datestr1,
                 plot_desc=self.plot_description,
-                )
+            )
         self.current_title = \
             '\n'.join(textwrap.wrap(str1,
                                     ForestPlot.TITLE_TEXT_WIDTH))
+
     @forest.util.timer
     def create_plot(self):
-
         '''Main plotting function. Generic elements of the plot are created
         here, and then the plotting function for the specific variable is
         called using the self.plot_funcs dictionary.
-        
+
         '''
 
-        self.create_matplotlib_fig()
-        self.create_bokeh_img_plot_from_fig()
+        try:
+            self._init_matplotlib_fig()
+            self.create_matplotlib_fig()
+        except NoDataError:
+            # TODO: Need to reset/clear the plot else we will just show previous plot. OK on spin up, problems later?
+            print("No data for current plot")
 
+        self.create_bokeh_img_plot_from_fig()
         return self.bokeh_figure
 
-    @forest.util.timer
-    def create_matplotlib_fig(self):
-
-        '''
-
-        '''
+    def _init_matplotlib_fig(self):
         self.current_figure = matplotlib.pyplot.figure(self.figure_name,
                                                        figsize=self.current_figsize)
         self.current_figure.clf()
@@ -799,6 +768,15 @@ class ForestPlot(object):
                 111,
                 projection=cartopy.crs.PlateCarree())
         self.current_axes.set_position([0, 0, 1, 1])
+
+    @forest.util.timer
+    def create_matplotlib_fig(self):
+        '''
+
+        '''
+        if not self.current_figure:
+            self._init_matplotlib_fig()
+
         self.plot_funcs[self.current_var]()
         if self.main_plot:
             if self.use_mpl_title:
@@ -816,7 +794,7 @@ class ForestPlot(object):
             self.current_figure.canvas.draw()
 
     def _setup_tools(self):
-        self.bokeh_tools = dict([(k1,None) for k1 in BOKEH_TOOLS_LIST])
+        self.bokeh_tools = dict([(k1, None) for k1 in BOKEH_TOOLS_LIST])
         if 'pan' in BOKEH_TOOLS_LIST:
             self.bokeh_tools['pan'] = bokeh.models.PanTool()
         if 'wheel_zoom' in BOKEH_TOOLS_LIST:
@@ -839,11 +817,7 @@ class ForestPlot(object):
         self.active_bokeh_tools['scroll'] = self.bokeh_tools['wheel_zoom']
         self.active_bokeh_tools['tap'] = None
 
-
-
-
     def create_bokeh_img_plot_from_fig(self):
-
         '''
 
         '''
@@ -868,7 +842,6 @@ class ForestPlot(object):
                                       y_range=y_limits,
                                       tools=','.join(BOKEH_TOOLS_LIST))
 
-
         if self.current_img_array is not None:
             self.create_bokeh_img()
         else:
@@ -887,7 +860,6 @@ class ForestPlot(object):
         self.bokeh_figure.title.text = self.current_title
 
     def create_bokeh_img(self):
-
         '''
 
         '''
@@ -905,7 +877,6 @@ class ForestPlot(object):
         self.bokeh_img_ds = self.bokeh_image.data_source
 
     def update_bokeh_img_plot_from_fig(self):
-
         '''
 
         '''
@@ -938,11 +909,10 @@ class ForestPlot(object):
                 self.current_img_array = None
 
     def update_plot(self):
-
         '''Main plot update function. Generic elements of the plot are
         updated here where possible, and then the plot update function for
         the specific variable is called using the self.plot_funcs dictionary.
-        
+
         '''
 
         self.update_funcs[self.current_var]()
@@ -955,7 +925,6 @@ class ForestPlot(object):
             self.update_stats_widget()
 
     def create_stats_widget(self):
-
         '''
 
         '''
@@ -967,14 +936,13 @@ class ForestPlot(object):
         return self.stats_widget
 
     def create_colorbar_widget(self):
-
         '''
 
         '''
 
         colorbar_html = "<img src='" + self.app_path + "/static/" + \
                         self.colorbar_link + "'\>"
-            
+
         self.colorbar_widget = bokeh.models.widgets.Div(text=colorbar_html,
                                                         height=100,
                                                         width=800,
@@ -982,7 +950,6 @@ class ForestPlot(object):
         return self.colorbar_widget
 
     def update_stats_widget(self):
-
         '''
 
         '''
@@ -995,7 +962,6 @@ class ForestPlot(object):
             print('Unable to update stats as stats widget not initiated')
 
     def update_colorbar_widget(self):
-
         '''
 
         '''
@@ -1013,7 +979,6 @@ class ForestPlot(object):
 
     @forest.util.timer
     def set_data_time(self, new_time):
-
         '''
 
         '''
@@ -1031,7 +996,6 @@ class ForestPlot(object):
                 self.update_colorbar_widget()
 
     def set_var(self, new_var):
-
         '''
 
         '''
@@ -1048,7 +1012,6 @@ class ForestPlot(object):
                 self.update_colorbar_widget()
 
     def set_region(self, new_region):
-
         '''Event handler for a change in the selected plot region.
 
         '''
@@ -1064,7 +1027,6 @@ class ForestPlot(object):
                 self.update_stats_widget()
 
     def set_config(self, new_config):
-
         '''Function to set a new value of config and do an update
 
         '''
@@ -1096,9 +1058,7 @@ class ForestPlot(object):
                 self.update_stats(current_data)
                 self.update_stats_widget()
 
-
     def link_axes_to_other_plot(self, other_plot):
-
         '''
 
         '''
@@ -1109,12 +1069,14 @@ class ForestPlot(object):
         except:
             print('bokeh plot linking failed.')
 
+
 class ForestTimeSeries():
     """
     Class representing a time series plot. Unlike a map based plot, where
     each plot represents a single dataset, the timeseries plot plot several
     datasets together in the same plot for comparison purposes.
     """
+
     def __init__(self,
                  datasets,
                  model_run_time,
@@ -1138,9 +1100,8 @@ class ForestTimeSeries():
         self.current_var = current_var
         self.cds_dict = {}
 
-        self.placeholder_data = {'x_values': [0.0,1.0],
-                                 'y_values': [0.0,0.0]}
-
+        self.placeholder_data = {'x_values': [0.0, 1.0],
+                                 'y_values': [0.0, 0.0]}
 
     def __str__(self):
         """
@@ -1160,11 +1121,16 @@ class ForestTimeSeries():
         self.cds_list = {}
         for ds_name in self.datasets.keys():
             current_ds = self.datasets[ds_name]['data']
-            times1 = current_ds.get_times(self.current_var)
-            times1 = times1 - times1[0]
-            var_cube = \
-                current_ds.get_timeseries(self.current_var,
-                                          self.current_point)
+            try:
+                times1 = current_ds.get_times(self.current_var)
+                times1 = times1 - times1[0]
+                var_cube = \
+                    current_ds.get_timeseries(self.current_var,
+                                            self.current_point)
+            except NoDataError as e:
+                print("No data. Error: %s" % e)
+                var_cube = None
+
             if var_cube:
                 var_values = var_cube.data
 
@@ -1212,7 +1178,7 @@ class ForestTimeSeries():
                     var_values = var_cube.data
 
                     data1 = {'x_values': times1,
-                         'y_values': var_values}
+                             'y_values': var_values}
 
                     self.cds_dict[ds_name].data = data1
                 else:

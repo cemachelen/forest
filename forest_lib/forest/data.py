@@ -28,6 +28,7 @@ import iris.coord_categorisation
 import cf_units
 
 import forest.util
+from forest.errors import NoDataError
 
 # The number of days into the past to look for data. The current
 # value specifies looking for data up to 1 week old
@@ -41,8 +42,8 @@ MODEL_RUN_PERIOD = 12
 TIME_EPSILON_HRS = 0.1
 NUM_HOURS_IN_DAY = 24
 
-COORD_WINDOW_SIZE = 0.5 # 0.5 degree window around point for interpolation for
-                      # time series
+COORD_WINDOW_SIZE = 0.5  # 0.5 degree window around point for interpolation for
+# time series
 
 WIND_SPEED_NAME = 'wind_speed'
 WIND_VECTOR_NAME = 'wind_vectors'
@@ -89,9 +90,9 @@ WIND_VARS = WIND_VECTOR_VARS + [WIND_SPEED_NAME,
                                 WIND_VECTOR_NAME,
                                 ]
 
-PRECIP_ACCUM_WINDOW_SIZES_LIST = [3,6,12,24]
+PRECIP_ACCUM_WINDOW_SIZES_LIST = [3, 6, 12, 24]
 
-WIND_GRID_SIZE = (40,30)
+WIND_GRID_SIZE = (40, 30)
 
 PRECIP_ACCUM_WINDOW_SIZES_DICT = dict([('accum_precip_{0}hr'.format(window1), window1) for window1 in PRECIP_ACCUM_WINDOW_SIZES_LIST])
 PRECIP_ACCUM_VARS = list(PRECIP_ACCUM_WINDOW_SIZES_DICT.keys())
@@ -102,14 +103,14 @@ UNIT_DICT = {PRECIP_VAR_NAME: PRECIP_UNIT_RATE,
              'x_wind': WIND_UNIT_MPH,
              'y_wind': WIND_UNIT_MPH,
              WIND_SPEED_NAME: WIND_UNIT_MPH,
-             MSLP_NAME : MSLP_UNIT_HPA,
+             MSLP_NAME: MSLP_UNIT_HPA,
              WIND_VECTOR_NAME: WIND_UNIT_MPH,
              WIND_STREAM_NAME: WIND_UNIT_MPH,
              WIND_MSLP_NAME: WIND_UNIT_MPH,
              }
 
-UNIT_DICT.update(dict([(var1,WIND_UNIT_MPH) for var1 in WIND_VECTOR_VARS]))
-UNIT_DICT.update(dict([(var1,PRECIP_UNIT_ACCUM) for var1 in PRECIP_ACCUM_VARS]))
+UNIT_DICT.update(dict([(var1, WIND_UNIT_MPH) for var1 in WIND_VECTOR_VARS]))
+UNIT_DICT.update(dict([(var1, PRECIP_UNIT_ACCUM) for var1 in PRECIP_ACCUM_VARS]))
 
 UNIT_DICT_DISPLAY = {PRECIP_VAR_NAME: PRECIP_UNIT_RATE_DISPLAY,
                      'cloud_fraction': None,
@@ -122,8 +123,8 @@ UNIT_DICT_DISPLAY = {PRECIP_VAR_NAME: PRECIP_UNIT_RATE_DISPLAY,
                      WIND_STREAM_NAME: WIND_UNIT_MPH_DISPLAY,
                      }
 
-UNIT_DICT_DISPLAY.update(dict([(var1,WIND_UNIT_MPH_DISPLAY) for var1 in WIND_VECTOR_VARS]))
-UNIT_DICT_DISPLAY.update(dict([(var1,PRECIP_UNIT_ACCUM_DISPLAY) for var1 in PRECIP_ACCUM_VARS]))
+UNIT_DICT_DISPLAY.update(dict([(var1, WIND_UNIT_MPH_DISPLAY) for var1 in WIND_VECTOR_VARS]))
+UNIT_DICT_DISPLAY.update(dict([(var1, PRECIP_UNIT_ACCUM_DISPLAY) for var1 in PRECIP_ACCUM_VARS]))
 
 N1280_GA6_KEY = 'n1280_ga6'
 KM4P4_RA1T_KEY = 'km4p4_ra1t'
@@ -138,16 +139,15 @@ VAR_LIST_FNAME_BASE = 'var_list_{config}.conf'
 
 
 def get_var_lookup(config):
-
     """Read config files into dictionary.
-    
+
     Arguments
     ---------
-    
+
     - config -- Str; set config type to read file for.
-    
+
     """
-    
+
     var_list_path = os.path.join(VAR_LIST_DIR,
                                  VAR_LIST_FNAME_BASE.format(config=config))
     parser1 = configparser.RawConfigParser()
@@ -164,7 +164,7 @@ def get_var_lookup(config):
                 field_dict[sect1]['accumulate'] == 'True'
         except:
             print('warning: stash values not converted to numbers.')
-            
+
     return field_dict
 
 
@@ -217,8 +217,8 @@ def get_available_datasets(file_loader,
     """
     fcast_dt_list, fcast_dt_str_list = \
         get_model_run_times(days_since_period_start,
-                                        num_days,
-                                        model_period)
+                            num_days,
+                            model_period)
 
     fcast_time_list = []
     datasets = {}
@@ -232,12 +232,10 @@ def get_available_datasets(file_loader,
                                                                        file_loader,
                                                                        dataset_template[ds_name]['var_lookup'])
 
-            model_run_data_present = model_run_data_present and file_loader.file_exists(file_name)
         # include forecast if all configs are present
         # TODO: reconsider data structure to allow for some model configs at different times to be present
-        if model_run_data_present:
-            datasets[fct_str] = fct_data_dict
-            fcast_time_list += [fct_str]
+        datasets[fct_str] = fct_data_dict
+        fcast_time_list += [fct_str]
 
     # select most recent available forecast
     try:
@@ -281,6 +279,7 @@ def check_bounds(cube1, selected_pt):
 
     return True
 
+
 def do_cube_load(path_to_load,
                  field_dict,
                  time_ix,
@@ -301,7 +300,7 @@ def do_cube_load(path_to_load,
                            degree window of points.
     :return: The iris cube of the data at the path with given constraints.
     """
-    cf1 = lambda cube1: \
+    def cf1(cube1): return \
         cube1.attributes['STASH'].section == \
         field_dict['stash_section'] and \
         cube1.attributes['STASH'].item == \
@@ -315,7 +314,6 @@ def do_cube_load(path_to_load,
             def time_comp(time_index, eps1, cell1):
                 return abs(cell1.point - time_index) < eps1
 
-
             if time_ix != ForestDataset.TIME_INDEX_ALL:
                 coord_constraint_dict['time'] = \
                     functools.partial(time_comp, time_ix, 1e-5)
@@ -325,11 +323,9 @@ def do_cube_load(path_to_load,
 
                 return abs(cell1.point - selected_time).total_seconds() < eps1
 
-
             if time_ix != ForestDataset.TIME_INDEX_ALL:
                 coord_constraint_dict['time'] = \
                     functools.partial(time_comp, time_obj, 1)
-
 
     else:
         time_desc = time_ix
@@ -355,8 +351,6 @@ def do_cube_load(path_to_load,
             )
     else:
         loc_desc = 'loading all locations'
-
-
 
     ic1 = iris.Constraint(cube_func=cf1,
                           coord_values=coord_constraint_dict)
@@ -417,7 +411,6 @@ class ForestDataset(object):
             self.time_loaders[accum_precip_var] = functools.partial(self._accum_precip_time_load, ws1)
         self.times = dict([(v1, None) for v1 in self.time_loaders.keys()])
 
-
         # set up data loader functions
         self.cube_loaders = dict([(v1, self.basic_cube_load) for v1 in VAR_NAMES])
         self.cube_loaders[WIND_SPEED_NAME] = self.wind_speed_loader
@@ -462,27 +455,33 @@ class ForestDataset(object):
         """
         path_to_load = self.file_loader.load_file(self.file_name)
         field_dict = self.var_lookup[var_name]
-        cf1 = lambda cube1: \
+
+        def cf1(cube1): return \
             cube1.attributes['STASH'].section == \
             field_dict['stash_section'] and \
             cube1.attributes['STASH'].item == \
             field_dict['stash_item']
         ic1 = iris.Constraint(cube_func=cf1)
-        cube1 = iris.load_cube(path_to_load, ic1)
-        self.times[var_name] = cube1.coord('time').points
-        self.data[var_name] =  dict([(t1,None) for t1 in self.times[var_name]] + [('all',None)])
+        try:
+            cube1 = iris.load_cube(path_to_load, ic1)
+            self.times[var_name] = cube1.coord('time').points
+            self.data[var_name] = dict([(t1, None) for t1 in self.times[var_name]] + [('all', None)])
+        except (IOError, OSError) as e:
+            self.times[var_name] = None
+            self.data[var_name] = None
+            raise NoDataError(e)
 
     def _wind_time_load(self, var_name):
         """
         """
         if self.times['x_wind'] is None:
             self._basic_time_load('x_wind')
-            self.data['x_wind'].update(dict([(t1,None,) for t1 in self.times['x_wind'] ]))
+            self.data['x_wind'].update(dict([(t1, None,) for t1 in self.times['x_wind']]))
 
         for var1 in WIND_VARS:
             if self.times[var1] is None:
                 self.times[var1] = copy.deepcopy(self.times['x_wind'])
-                self.data[var1] = dict([(t1,None,) for t1 in self.times[var1] ]+ [('all',None)])
+                self.data[var1] = dict([(t1, None,) for t1 in self.times[var1]] + [('all', None)])
 
     def _accum_precip_time_load(self, window_size1, var_name):
         """
@@ -490,7 +489,7 @@ class ForestDataset(object):
         self._basic_time_load(PRECIP_VAR_NAME)
         self.times[var_name] = \
             numpy.unique(numpy.floor(self.times[PRECIP_VAR_NAME] / window_size1) * window_size1) + (window_size1/2.0)
-        self.data[var_name] = dict([(t1, None) for t1 in self.times[var_name]] + [('all',None)])
+        self.data[var_name] = dict([(t1, None) for t1 in self.times[var_name]] + [('all', None)])
 
     def get_data(self, var_name, selected_time, convert_units=True):
         """Calls functions to retrieve and load data.
@@ -538,7 +537,7 @@ class ForestDataset(object):
 
         Arguments
         ---------
-        
+
         - var_name -- Str; Var name used to define data to load.
         - time_ix -- Index of the time to load
 
@@ -552,15 +551,14 @@ class ForestDataset(object):
         self.data[var_name][time_ix] = dc1
 
     def wind_speed_loader(self, var_name, time_ix):
-    
         """Process wind cubes to calculate wind speed.
-        
+
         Arguments
         ---------
-        
+
         - var_name -- Str; Redundant: used to match other loaders.
         - time_ix -- Str; specify the time to load
-        
+
         """
 
         cube_pow = iris.analysis.maths.exponentiate
@@ -569,21 +567,20 @@ class ForestDataset(object):
         cube_y_wind = self.get_data('y_wind', time_ix)
 
         self.data[WIND_SPEED_NAME][time_ix] = cube_pow(cube_pow(cube_x_wind, 2.0) +
-                                              cube_pow(cube_y_wind, 2.0),
-                                              0.5)
+                                                       cube_pow(cube_y_wind, 2.0),
+                                                       0.5)
         self.data[WIND_SPEED_NAME][time_ix].rename(WIND_SPEED_NAME)
 
     def wind_vector_loader(self, var_name, time_ix):
-    
         """Gets wind data and calculates wind vectors.
 
         Arguments
         ---------
-        
+
         - var_name -- Str; Redundant: used to match other loaders.
 
         """
-        
+
         cube_x_wind = self.get_data('x_wind', time_ix)
         cube_y_wind = self.get_data('y_wind', time_ix)
         wv_dict = forest.util.calc_wind_vectors(cube_x_wind,
@@ -591,19 +588,19 @@ class ForestDataset(object):
                                                 WIND_GRID_SIZE)
         for var1 in wv_dict:
             self.data[var1][time_ix] = wv_dict[var1]
-        
+
     def accum_precip_loader(self, window_size, var_name, time_ix):
-        
         """Gets data and creates accumulated precipitation cube.
 
         Arguments
         ---------
-        
+
         - var_name -- Str; Precip accum variable name.
 
         """
         field_dict = self.var_lookup['precipitation']
-        cf1 = lambda cube1: \
+
+        def cf1(cube1): return \
             cube1.attributes['STASH'].section == \
             field_dict['stash_section'] and \
             cube1.attributes['STASH'].item == \
@@ -626,8 +623,8 @@ class ForestDataset(object):
 
         path_to_load = self.file_loader.load_file(self.file_name)
         precip_cube1 = iris.load_cube(path_to_load, ic1)
-        precip_cube1.convert_units(UNIT_DICT['precipitation']) # convert to average hourly accumulation
-        precip_cube1.data *= 3 #multiply by 3 to get 3 hour accumulation
+        precip_cube1.convert_units(UNIT_DICT['precipitation'])  # convert to average hourly accumulation
+        precip_cube1.data *= 3  # multiply by 3 to get 3 hour accumulation
         if precip_cube1.coord('time').shape[0] == 1:
             accum_cube = precip_cube1
         else:
@@ -651,12 +648,11 @@ class ForestDataset(object):
                                lat_long_coord=selected_point)
         return dc1
 
-
     def _wind_ts_loader(self, var_name, selected_point):
         cube_x_wind = self._basic_ts_load('x_wind',
-                                   selected_point)
+                                          selected_point)
         cube_y_wind = self._basic_ts_load('x_wind',
-                                   selected_point)
+                                          selected_point)
 
         if cube_x_wind is None or cube_y_wind is None:
             return None
@@ -664,12 +660,11 @@ class ForestDataset(object):
         cube_pow = iris.analysis.maths.exponentiate
 
         ws_cube = cube_pow(cube_pow(cube_x_wind, 2.0) +
-                                              cube_pow(cube_y_wind, 2.0),
-                                              0.5)
+                           cube_pow(cube_y_wind, 2.0),
+                           0.5)
         ws_cube.rename(WIND_SPEED_NAME)
 
         return ws_cube
-
 
     def _precip_accum_ts_load(self, ws1, var_name, selected_point):
         accum_precip_cube = None
@@ -688,7 +683,7 @@ class ForestDataset(object):
         # create a new coordinate for accumlating precip
         def conv_func_raw(window_length, coord, value):
             return value - value % window_length
-        conv_func = functools.partial(conv_func_raw,ws1)
+        conv_func = functools.partial(conv_func_raw, ws1)
         iris.coord_categorisation.add_categorised_coord(
             cube=precip_cube,
             name='agg_time',
@@ -705,7 +700,6 @@ class ForestDataset(object):
         return accum_precip_cube
 
     def get_timeseries(self, var_name, selected_point, convert_units=True):
-
         """Calls functions to retrieve and load data.
 
         Arguments
@@ -716,8 +710,6 @@ class ForestDataset(object):
         """
         print('load time series for point ({0},{1})'.format(selected_point[0],
                                                             selected_point[1]))
-
-
 
         # extract the relevant timeseries
         dc1 = self.ts_loaders[var_name](var_name,
@@ -731,8 +723,8 @@ class ForestDataset(object):
                             selected_point):
             return None
 
-        interp_pt = [('latitude',selected_point[0]),
-                     ('longitude',selected_point[1])]
+        interp_pt = [('latitude', selected_point[0]),
+                     ('longitude', selected_point[1])]
         scheme1 = iris.analysis.Linear()
         time_series_cube = dc1.interpolate(interp_pt,
                                            scheme1)
