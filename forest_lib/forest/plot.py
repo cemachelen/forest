@@ -1,6 +1,6 @@
 import textwrap
 import dateutil
-
+import os.path
 import numpy
 
 import matplotlib
@@ -23,13 +23,6 @@ from forest.errors import NoDataError
 BOKEH_TOOLS_LIST = ['pan', 'wheel_zoom', 'reset', 'save', 'box_zoom', 'hover']
 
 
-class MissingDataError(Exception):
-    def __init__(self, config, var, time):
-        self.config = config
-        self.var = var
-        self.time = time
-
-
 class ForestPlot(object):
 
     '''
@@ -37,10 +30,6 @@ class ForestPlot(object):
     '''
     TITLE_TEXT_WIDTH = 40
     PRESSURE_LEVELS_HPA = range(980, 1030, 2)
-
-    MODE_PLOT = 'plot'
-    MODE_LOADING = 'loading'
-    MODE_MISSING_DATA = 'missing_data'
 
     def __init__(self,
                  dataset,
@@ -92,7 +81,6 @@ class ForestPlot(object):
         self.current_figsize = (8.0, 6.0)
         self.bokeh_fig_size = (800, 600)
         self.coast_res = '50m'
-        self.display_mode = ForestPlot.MODE_LOADING
 
     def _set_config_value(self, new_config):
         '''
@@ -174,6 +162,7 @@ class ForestPlot(object):
         self.coords_lat = data_cube.coords('latitude')[0].points
         self.coords_long = data_cube.coords('longitude')[0].points
 
+    # TODO: Is this used anywhere?
     def create_blank(self):
         '''
 
@@ -741,6 +730,19 @@ class ForestPlot(object):
             '\n'.join(textwrap.wrap(str1,
                                     ForestPlot.TITLE_TEXT_WIDTH))
 
+    def _nodata(self):
+        self.current_title = "Missing Data"
+        self.current_time
+
+        no_data_tile = matplotlib.pyplot.imread(os.path.join(os.path.dirname(__file__), 'no-data.png'))
+        w, h = self.bokeh_fig_size
+        tiled = numpy.tile(no_data_tile, (
+            ceil(w/data.shape[0]),
+            ceil(h/data.shape[1]),
+            1))
+        tiled = tiled[:w, :h, :]
+        self.current_img_array = tiled
+
     @forest.util.timer
     def create_plot(self):
         '''Main plotting function. Generic elements of the plot are created
@@ -755,8 +757,9 @@ class ForestPlot(object):
         except NoDataError:
             # TODO: Need to reset/clear the plot else we will just show previous plot. OK on spin up, problems later?
             print("No data for current plot")
+            self._nodata()
 
-        self.create_bokeh_img_plot_from_fig()
+        self.create_bokeh_img_plot_from_img_array()
         return self.bokeh_figure
 
     def _init_matplotlib_fig(self):
@@ -817,7 +820,8 @@ class ForestPlot(object):
         self.active_bokeh_tools['scroll'] = self.bokeh_tools['wheel_zoom']
         self.active_bokeh_tools['tap'] = None
 
-    def create_bokeh_img_plot_from_fig(self):
+
+    def _create_bokeh_img_plot_from_img_array(self):
         '''
 
         '''
@@ -876,21 +880,13 @@ class ForestPlot(object):
                                          dh=[latitude_range])
         self.bokeh_img_ds = self.bokeh_image.data_source
 
-    def update_bokeh_img_plot_from_fig(self):
+    def update_bokeh_img_plot_from_img_array(self):
         '''
 
         '''
 
-        cur_region = self.region_dict[self.current_region]
-        self.current_figure.set_figwidth(self.current_figsize[0])
-        self.current_figure.set_figheight(
-            round(self.current_figure.get_figwidth() *
-                  (cur_region[1] - cur_region[0]) /
-                  (cur_region[3] - cur_region[2]), 2))
-
-        if self.bokeh_img_ds:
-            self.current_img_array = forest.util.get_image_array_from_figure(
-                self.current_figure)
+        if self.bokeh_img_ds and self.current_img_array:
+            cur_region = self.region_dict[self.current_region]
             self.bokeh_img_ds.data[u'image'] = [self.current_img_array]
             self.bokeh_img_ds.data[u'x'] = [cur_region[2]]
             self.bokeh_img_ds.data[u'y'] = [cur_region[0]]
@@ -898,29 +894,28 @@ class ForestPlot(object):
             self.bokeh_img_ds.data[u'dh'] = [cur_region[1] - cur_region[0]]
             self.bokeh_figure.title.text = self.current_title
 
-        else:
-            try:
-                self.current_img_array = \
-                    forest.util.get_image_array_from_figure(
-                        self.current_figure)
-                self.create_bokeh_img()
-                self.bokeh_figure.title.text = self.current_title
-            except:
-                self.current_img_array = None
-
     def update_plot(self):
         '''Main plot update function. Generic elements of the plot are
         updated here where possible, and then the plot update function for
         the specific variable is called using the self.plot_funcs dictionary.
 
         '''
+        try:
+            self.update_funcs[self.current_var]()
+            self.current_figure.set_figwidth(self.current_figsize[0])
+            self.current_figure.set_figheight(
+                round(self.current_figure.get_figwidth() *
+                      (cur_region[1] - cur_region[0]) /
+                      (cur_region[3] - cur_region[2]), 2))
+            self.current_img_array = forest.util.get_image_array_from_figure(self.current_figure)
+        except NoDataError:
+            self._nodata()
 
-        self.update_funcs[self.current_var]()
         if self.use_mpl_title:
             self.current_axes.set_title(self.current_title)
         self.current_figure.canvas.draw_idle()
         if not self.async:
-            self.update_bokeh_img_plot_from_fig()
+            self.update_bokeh_img_plot_from_img_array()
         if self.stats_widget:
             self.update_stats_widget()
 
@@ -1126,7 +1121,7 @@ class ForestTimeSeries():
                 times1 = times1 - times1[0]
                 var_cube = \
                     current_ds.get_timeseries(self.current_var,
-                                            self.current_point)
+                                              self.current_point)
             except NoDataError as e:
                 print("No data. Error: %s" % e)
                 var_cube = None
