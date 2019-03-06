@@ -1,3 +1,10 @@
 title: HIGHWAY comparison project
-lon_range: [-10, 10]
+lon_range: [10, 20]
 lat_range: [-10, 10]
+models:
+    - name: Tropical Africa 4.4km
+      pattern: highway_takm4p4_*.nc
+    - name: East Africa 4.4km
+      pattern: highway_eakm4p4_*.nc
+    - name: Global East Africa
+      pattern: highway_ga6_*.nc

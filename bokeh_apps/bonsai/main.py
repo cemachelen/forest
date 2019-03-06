@@ -11,14 +11,23 @@ class Config(object):
     def __init__(self,
                  title="Bonsai - miniature Forest",
                  lon_range=None,
-                 lat_range=None):
+                 lat_range=None,
+                 models=None):
+        def assign(value, default):
+            return default if value is None else value
         self.title = title
-        if lon_range is None:
-            lon_range = [-180, 180]
-        self.lon_range = lon_range
-        if lat_range is None:
-            lat_range = [-80, 80]
-        self.lat_range = lat_range
+        self.lon_range = assign(lon_range, [-180, 180])
+        self.lat_range = assign(lat_range, [-80, 80])
+        self.models = assign(models, [])
+
+    @property
+    def model_names(self):
+        return [model["name"] for model in self.models]
+
+    def model_pattern(self, name):
+        for model in self.models:
+            if name == model["name"]:
+                return model["pattern"]
 
     @classmethod
     def load(cls, path):
@@ -50,9 +59,30 @@ def main():
     toolbar_box = bokeh.models.ToolbarBox(
         toolbar=figure.toolbar,
         toolbar_location="below")
+
+    def select(dropdown):
+        def on_click(value):
+            dropdown.label = value
+        return on_click
+
+    def on_model(config):
+        def on_click(value):
+            print(value, config.model_pattern(value))
+        return on_click
+
+    menu = [(name, name) for name in config.model_names]
+    dropdown = bokeh.models.Dropdown(
+        label="Select model",
+        menu=menu)
+    dropdown.on_click(select(dropdown))
+    dropdown.on_click(on_model(config))
+
     document = bokeh.plotting.curdoc()
     document.add_root(figure)
     document.add_root(toolbar_box)
+    document.add_root(bokeh.layouts.column(
+        dropdown,
+        name="controls"))
     document.title = config.title
 
 
