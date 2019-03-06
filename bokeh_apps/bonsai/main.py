@@ -1,20 +1,59 @@
 """Minimalist implementation of FOREST"""
+import os
+import yaml
 import bokeh.plotting
 import bokeh.models
 import cartopy
 import numpy as np
 
 
+class Config(object):
+    def __init__(self,
+                 title="Bonsai - miniature Forest",
+                 lon_range=None,
+                 lat_range=None):
+        self.title = title
+        if lon_range is None:
+            lon_range = [-180, 180]
+        self.lon_range = lon_range
+        if lat_range is None:
+            lat_range = [-80, 80]
+        self.lat_range = lat_range
+
+    @classmethod
+    def load(cls, path):
+        with open(path) as stream:
+            kwargs = yaml.load(stream)
+        return cls(**kwargs)
+
+
+class Environment(object):
+    def __init__(self, **kwargs):
+        self.__dict__.update(**kwargs)
+
+
+def parse_env():
+    config_file = os.environ.get("FOREST_CONFIG", None)
+    return Environment(config_file=config_file)
+
+
 def main():
+    env = parse_env()
+    if env.config_file is None:
+        config = Config()
+    else:
+        config = Config.load(env.config_file)
+
     figure = full_screen_figure(
-        lon_range=(-20, 60),
-        lat_range=(-30, 20))
+        lon_range=config.lon_range,
+        lat_range=config.lat_range)
     toolbar_box = bokeh.models.ToolbarBox(
         toolbar=figure.toolbar,
         toolbar_location="below")
     document = bokeh.plotting.curdoc()
     document.add_root(figure)
     document.add_root(toolbar_box)
+    document.title = config.title
 
 
 def full_screen_figure(
