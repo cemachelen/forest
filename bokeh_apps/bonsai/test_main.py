@@ -3,6 +3,7 @@ import unittest
 import unittest.mock
 import os
 import yaml
+import bokeh.plotting
 import main
 
 
@@ -99,24 +100,42 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(expect, result)
 
 
-class TestOnClick(unittest.TestCase):
-    def test_on_click(self):
-        state = main.State()
-        view = unittest.mock.Mock()
-        state.register(view)
-        state.on("model")("A")
-        view.notify.assert_called_once_with({"model": "A"})
+class TestPubSub(unittest.TestCase):
+    """Tiny publish/subscribe model to decouple views from controllers"""
+    def setUp(self):
+        self.state = main.State()
+        self.view = unittest.mock.Mock()
+
+    def test_register_notifies_views(self):
+        self.state.register(self.view)
+        self.state.on("model")("A")
+        self.view.notify.assert_called_once_with({"model": "A"})
 
     def test_state_merges_streams(self):
-        state = main.State()
-        view = unittest.mock.Mock()
-        state.register(view)
-        state.on("model")("A")
-        state.on("date")("B")
-        state.on("model")("B")
+        self.state.register(self.view)
+        self.state.on("model")("A")
+        self.state.on("date")("B")
+        self.state.on("model")("B")
         calls = [
             unittest.mock.call({"model": "A"}),
             unittest.mock.call({"model": "A", "date": "B"}),
             unittest.mock.call({"model": "B", "date": "B"}),
         ]
-        view.notify.assert_has_calls(calls)
+        self.view.notify.assert_has_calls(calls)
+
+    def test_register_can_listen_to_particular_changes(self):
+        self.state.register(self.view, "model")
+        self.state.on("model")("A")
+        self.state.on("date")("B")
+        self.state.on("model")("B")
+        calls = [
+            unittest.mock.call({"model": "A"}),
+            unittest.mock.call({"model": "B", "date": "B"}),
+        ]
+        self.view.notify.assert_has_calls(calls)
+
+
+class TestImage(unittest.TestCase):
+    def test_constructor(self):
+        figure = bokeh.plotting.figure()
+        image = main.Image(figure)

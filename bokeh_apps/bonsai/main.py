@@ -1,4 +1,5 @@
 """Minimalist implementation of FOREST"""
+from collections import defaultdict
 import os
 import glob
 import yaml
@@ -6,6 +7,7 @@ import bokeh.plotting
 import bokeh.models
 import cartopy
 import numpy as np
+import netCDF4
 
 
 class Config(object):
@@ -70,6 +72,15 @@ def main():
         dicts.append(Config.load_dict(env.config_file))
     config = Config.merge(*dicts)
 
+    state = State()
+    state.register(Echo())
+
+    file_system = FileSystem(
+        models=config.models,
+        model_dir=config.model_dir)
+    file_system.on_change("path", state.on_change("path"))
+    state.register(file_system, "model")
+
     figure = full_screen_figure(
         lon_range=config.lon_range,
         lat_range=config.lat_range)
@@ -87,18 +98,16 @@ def main():
         label="Select model",
         menu=menu)
     dropdown.on_click(select(dropdown))
-
-    state = State()
     dropdown.on_click(state.on("model"))
-
-    list_files = ListFiles(config)
-    state.register(list_files)
 
     date_picker = bokeh.models.DatePicker()
     date_picker.on_change("value", state.on_change("date"))
 
     bonsai_title = Title(figure)
     state.register(bonsai_title)
+
+    bonsai_image = Image(figure)
+    state.register(bonsai_image, "path")
 
     document = bokeh.plotting.curdoc()
     document.add_root(figure)
@@ -110,6 +119,102 @@ def main():
     document.title = config.title
 
 
+class FileSystem(object):
+    def __init__(self,
+                 models,
+                 model_dir=None):
+        self.models = models
+        self.model_dir = model_dir
+        self.callbacks = []
+
+    def on_change(self, attr, callback):
+        self.callbacks.append(callback)
+
+    def notify(self, state):
+        if "model" not in state:
+            return
+        pattern = self.full_pattern(state["model"])
+        path = sorted(glob.glob(pattern))[-1]
+        for cb in self.callbacks:
+            cb("path", None, path)
+
+    def full_pattern(self, name):
+        for model in self.models:
+            if name == model["name"]:
+                pattern = model["pattern"]
+                if self.model_dir is None:
+                    return pattern
+                else:
+                    return os.path.join(self.model_dir, pattern)
+
+
+class Image(object):
+    def __init__(self, figure):
+        self.figure = figure
+        self.source = bokeh.models.ColumnDataSource({
+            "x": [],
+            "y": [],
+            "dw": [],
+            "dh": [],
+            "image": []
+        })
+        color_mapper = bokeh.models.LinearColorMapper(
+            palette="Viridis256",
+            nan_color=bokeh.colors.RGB(0, 0, 0, a=0)
+        )
+        figure.image(
+            x="x",
+            y="y",
+            dw="dw",
+            dh="dh",
+            image="image",
+            source=self.source,
+            color_mapper=color_mapper)
+
+    def notify(self, state):
+        if "path" not in state:
+            return
+        print("Image: {}".format(state["path"]))
+        data = self.load(state["path"])
+        self.render(data)
+
+    def load(self, path):
+        i = 0
+        with netCDF4.Dataset(path) as dataset:
+            lons = dataset.variables["longitude_0"][:]
+            lats = dataset.variables["latitude_0"][:]
+            try:
+                values = dataset.variables["stratiform_rainfall_rate"][i]
+            except KeyError:
+                values = dataset.variables["precipitation_flux"][i]
+            image = np.ma.masked_array(values, values == 0.)
+            gx, _ = transform(
+                lons,
+                np.zeros(len(lons), dtype="d"),
+                cartopy.crs.PlateCarree(),
+                cartopy.crs.Mercator.GOOGLE)
+            _, gy = transform(
+                np.zeros(len(lats), dtype="d"),
+                lats,
+                cartopy.crs.PlateCarree(),
+                cartopy.crs.Mercator.GOOGLE)
+            x = gx.min()
+            y = gy.min()
+            dw = gx.max() - gx.min()
+            dh = gy.max() - gy.min()
+        data = {
+            "x": [x],
+            "y": [y],
+            "dw": [dw],
+            "dh": [dh],
+            "image": [image]
+        }
+        return data
+
+    def render(self, data):
+        self.source.data = data
+
+
 class Title(object):
     def __init__(self, figure):
         self.caption = bokeh.models.Label(
@@ -119,6 +224,7 @@ class Title(object):
             y_units="screen",
             y_offset=-10,
             text_font_size="12pt",
+            text_font_style="bold",
             text_align="center",
             text_baseline="top",
             text="")
@@ -144,24 +250,7 @@ class Title(object):
         self.caption.text = text
 
 
-def on_model(config):
-    def on_click(value):
-        print(value)
-        if config.model_dir is None:
-            pattern = config.model_pattern(value)
-        else:
-            pattern = os.path.join(
-                config.model_dir,
-                config.model_pattern(value))
-        for path in sorted(glob.glob(pattern)):
-            print(path)
-    return on_click
-
-
-class ListFiles(object):
-    def __init__(self, config):
-        self.config = config
-
+class Echo(object):
     def notify(self, state):
         print(state)
 
@@ -170,6 +259,7 @@ class State(object):
     def __init__(self):
         self.state = {}
         self.subscribers = []
+        self.special_subscribers = defaultdict(list)
 
     def on(self, attr):
         def callback(value):
@@ -181,15 +271,19 @@ class State(object):
             self.announce(state_attr, new)
         return callback
 
-    def register(self, subscriber):
-        self.subscribers.append(subscriber)
+    def register(self, subscriber, state_attr=None):
+        if state_attr is None:
+            self.subscribers.append(subscriber)
+        else:
+            self.special_subscribers[state_attr].append(subscriber)
 
     def announce(self, attr, value):
         self.state = dict(self.state)
         self.state[attr] = value
         for s in self.subscribers:
             s.notify(self.state)
-
+        for s in self.special_subscribers[attr]:
+            s.notify(self.state)
 
 
 def full_screen_figure(
