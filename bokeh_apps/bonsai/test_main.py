@@ -5,6 +5,7 @@ import os
 import yaml
 import bokeh.plotting
 import main
+import numpy as np
 
 
 class TestEnvironment(unittest.TestCase):
@@ -139,3 +140,21 @@ class TestImage(unittest.TestCase):
     def test_constructor(self):
         figure = bokeh.plotting.figure()
         image = main.Image(figure)
+
+
+class TestConvertUnits(unittest.TestCase):
+    def test_convert_units(self):
+        result = main.convert_units([1], "kg m-2 s-1", "kg m-2 hour-1")
+        expect = np.array([3600.])
+        np.testing.assert_array_almost_equal(expect, result)
+
+
+class TestStretchY(unittest.TestCase):
+    """Web Mercator projection introduces a y-axis stretching"""
+    def test_stretch_y(self):
+        values = [[0, 1, 2]]
+        uneven_y = [0, 2, 3]
+        transform = main.stretch_y(uneven_y)
+        result = transform(values, axis=1)
+        expect = [[0, 0.75, 2]]
+        np.testing.assert_array_almost_equal(expect, result)

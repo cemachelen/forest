@@ -8,6 +8,8 @@ import bokeh.models
 import cartopy
 import numpy as np
 import netCDF4
+import cf_units
+import scipy.ndimage
 
 
 class Config(object):
@@ -159,8 +161,10 @@ class Image(object):
             "image": []
         })
         color_mapper = bokeh.models.LinearColorMapper(
-            palette="Viridis256",
-            nan_color=bokeh.colors.RGB(0, 0, 0, a=0)
+            palette="RdYlBu11",
+            nan_color=bokeh.colors.RGB(0, 0, 0, a=0),
+            low=0,
+            high=32
         )
         figure.image(
             x="x",
@@ -170,6 +174,14 @@ class Image(object):
             image="image",
             source=self.source,
             color_mapper=color_mapper)
+        colorbar = bokeh.models.ColorBar(
+            color_mapper=color_mapper,
+            orientation="horizontal",
+            background_fill_alpha=0.,
+            location="bottom_center",
+            major_tick_line_color="black",
+            bar_line_color="black")
+        figure.add_layout(colorbar, 'center')
 
     def notify(self, state):
         if "path" not in state:
@@ -184,10 +196,12 @@ class Image(object):
             lons = dataset.variables["longitude_0"][:]
             lats = dataset.variables["latitude_0"][:]
             try:
-                values = dataset.variables["stratiform_rainfall_rate"][i]
+                var = dataset.variables["stratiform_rainfall_rate"]
             except KeyError:
-                values = dataset.variables["precipitation_flux"][i]
-            image = np.ma.masked_array(values, values == 0.)
+                var = dataset.variables["precipitation_flux"]
+            values = var[i]
+            units = var.units
+            values = convert_units(values, var.units, "kg m-2 hour-1")
             gx, _ = transform(
                 lons,
                 np.zeros(len(lons), dtype="d"),
@@ -198,6 +212,8 @@ class Image(object):
                 lats,
                 cartopy.crs.PlateCarree(),
                 cartopy.crs.Mercator.GOOGLE)
+            values = stretch_y(gy)(values)
+            image = np.ma.masked_array(values, values < 0.1)
             x = gx.min()
             y = gy.min()
             dw = gx.max() - gx.min()
@@ -213,6 +229,12 @@ class Image(object):
 
     def render(self, data):
         self.source.data = data
+
+
+def convert_units(values, old_unit, new_unit):
+    if isinstance(values, list):
+        values = np.asarray(values)
+    return cf_units.Unit(old_unit).convert(values, new_unit)
 
 
 class Title(object):
@@ -316,6 +338,45 @@ def transform(x, y, src_crs, dst_crs):
     x, y = np.asarray(x), np.asarray(y)
     xt, yt, _ = dst_crs.transform_points(src_crs, x.flatten(), y.flatten()).T
     return xt, yt
+
+
+def stretch_y(uneven_y):
+    """Mercator projection stretches longitude spacing
+
+    To remedy this effect an even-spaced resampling is performed
+    in the projected space to make the image pixels line up
+
+    .. note:: This approach assumes the grid is evenly spaced
+              in longitude/latitude space
+    """
+    if isinstance(uneven_y, list):
+        uneven_y = np.asarray(uneven_y, dtype=np.float)
+    even_y = np.linspace(
+        uneven_y.min(), uneven_y.max(), len(uneven_y),
+        dtype=np.float)
+    index = np.arange(len(uneven_y), dtype=np.float)
+    index_function = scipy.interpolate.interp1d(uneven_y, index)
+    index_fractions = index_function(even_y)
+
+    def wrapped(values, axis=0):
+        if isinstance(values, list):
+            values = np.asarray(values, dtype=np.float)
+        assert values.ndim == 2, "Can only stretch 2D arrays"
+        msg = "{} != {} do not match".format(values.shape[axis], len(uneven_y))
+        assert values.shape[axis] == len(uneven_y), msg
+        if axis == 0:
+            i = index_fractions
+            j = np.arange(values.shape[1], dtype=np.float)
+        elif axis == 1:
+            i = np.arange(values.shape[0], dtype=np.float)
+            j = index_fractions
+        else:
+            raise Exception("Can only handle axis 0 or 1")
+        return scipy.ndimage.map_coordinates(
+            values,
+            np.meshgrid(i, j, indexing="ij"),
+            order=1)
+    return wrapped
 
 
 if __name__.startswith("bk"):
