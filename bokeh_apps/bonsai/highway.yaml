@@ -1,5 +1,5 @@
 title: HIGHWAY comparison project
-lon_range: [10, 20]
+lon_range: [20, 40]
 lat_range: [-10, 10]
 models:
     - name: Tropical Africa 4.4km
