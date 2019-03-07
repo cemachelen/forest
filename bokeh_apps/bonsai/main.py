@@ -10,6 +10,11 @@ import numpy as np
 import netCDF4
 import cf_units
 import scipy.ndimage
+from threading import Thread
+from tornado import gen
+from functools import partial
+from bokeh.document import without_document_lock
+from concurrent.futures import ThreadPoolExecutor
 
 
 class Config(object):
@@ -105,13 +110,18 @@ def main():
     date_picker = bokeh.models.DatePicker()
     date_picker.on_change("value", state.on_change("date"))
 
-    bonsai_title = Title(figure)
-    state.register(bonsai_title)
-
-    bonsai_image = Image(figure)
-    state.register(bonsai_image, "path")
-
     document = bokeh.plotting.curdoc()
+    messenger = Messenger(figure)
+    image = AsyncImage(
+        document,
+        figure,
+        messenger)
+    state.register(image, "path")
+
+    title = Title(figure)
+    state.register(title, "model")
+    state.register(title, "date")
+
     document.add_root(figure)
     document.add_root(toolbar_box)
     document.add_root(bokeh.layouts.column(
@@ -150,9 +160,12 @@ class FileSystem(object):
                     return os.path.join(self.model_dir, pattern)
 
 
-class Image(object):
-    def __init__(self, figure):
+class AsyncImage(object):
+    def __init__(self, document, figure, messenger):
+        self.document = document
         self.figure = figure
+        self.messenger = messenger
+        self.executor = ThreadPoolExecutor(max_workers=2)
         self.source = bokeh.models.ColumnDataSource({
             "x": [],
             "y": [],
@@ -175,6 +188,7 @@ class Image(object):
             source=self.source,
             color_mapper=color_mapper)
         colorbar = bokeh.models.ColorBar(
+            title="Preciptation rate (mm/h)",
             color_mapper=color_mapper,
             orientation="horizontal",
             background_fill_alpha=0.,
@@ -187,8 +201,17 @@ class Image(object):
         if "path" not in state:
             return
         print("Image: {}".format(state["path"]))
-        data = self.load(state["path"])
-        self.render(data)
+        blocking_task = partial(self.load, state["path"])
+        self.document.add_next_tick_callback(
+            partial(self.unlocked_task, blocking_task))
+
+    @gen.coroutine
+    @without_document_lock
+    def unlocked_task(self, blocking_task):
+        self.document.add_next_tick_callback(self.messenger.on_load)
+        data = yield self.executor.submit(blocking_task)
+        self.document.add_next_tick_callback(partial(self.render, data))
+        self.document.add_next_tick_callback(self.messenger.on_complete)
 
     def load(self, path):
         i = 0
@@ -200,7 +223,6 @@ class Image(object):
             except KeyError:
                 var = dataset.variables["precipitation_flux"]
             values = var[i]
-            units = var.units
             values = convert_units(values, var.units, "kg m-2 hour-1")
             gx, _ = transform(
                 lons,
@@ -227,6 +249,7 @@ class Image(object):
         }
         return data
 
+    @gen.coroutine
     def render(self, data):
         self.source.data = data
 
@@ -235,6 +258,35 @@ def convert_units(values, old_unit, new_unit):
     if isinstance(values, list):
         values = np.asarray(values)
     return cf_units.Unit(old_unit).convert(values, new_unit)
+
+
+class Messenger(object):
+    def __init__(self, figure):
+        self.figure = figure
+        self.label = bokeh.models.Label(
+            x=0,
+            y=0,
+            text="",
+            text_font_style="bold")
+        self.figure.add_layout(self.label)
+
+    @gen.coroutine
+    def on_load(self):
+        self.render("Loading...")
+
+    @gen.coroutine
+    def on_complete(self):
+        self.render("")
+
+    def render(self, text):
+        self.label.x = (
+            self.figure.x_range.start +
+            self.figure.x_range.end) / 2
+        dy = 0.5
+        self.label.y = (
+            (1 - dy) * self.figure.y_range.start +
+            dy * self.figure.y_range.end)
+        self.label.text = text
 
 
 class Title(object):
@@ -344,10 +396,10 @@ def stretch_y(uneven_y):
     """Mercator projection stretches longitude spacing
 
     To remedy this effect an even-spaced resampling is performed
-    in the projected space to make the image pixels line up
+    in the projected space to make the pixels and grid line up
 
     .. note:: This approach assumes the grid is evenly spaced
-              in longitude/latitude space
+              in longitude/latitude space prior to projection
     """
     if isinstance(uneven_y, list):
         uneven_y = np.asarray(uneven_y, dtype=np.float)

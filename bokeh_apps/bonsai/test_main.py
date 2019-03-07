@@ -138,8 +138,13 @@ class TestPubSub(unittest.TestCase):
 
 class TestImage(unittest.TestCase):
     def test_constructor(self):
+        document = bokeh.plotting.curdoc()
         figure = bokeh.plotting.figure()
-        image = main.Image(figure)
+        messenger = main.Messenger(figure)
+        image = main.AsyncImage(
+            document,
+            figure,
+            messenger)
 
 
 class TestConvertUnits(unittest.TestCase):
