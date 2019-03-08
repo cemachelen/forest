@@ -105,14 +105,8 @@ def main():
     dropdown.on_click(select(dropdown))
     dropdown.on_click(state.on("model"))
 
-    date_picker = bokeh.models.DatePicker()
-    date_picker.on_change("value", state.on_change("date"))
-
-    radio_group = bokeh.models.RadioGroup(
-        labels=["00:00", "12:00"],
-        inline=True,
-        active=0,
-        css_classes=["bonsai-mg-lf-10"])
+    time_controls = TimeControls()
+    time_controls.on_change("datetime", state.on_change("date"))
 
     document = bokeh.plotting.curdoc()
     messenger = Messenger(figure)
@@ -129,11 +123,63 @@ def main():
     document.add_root(figure)
     document.add_root(toolbar_box)
     document.add_root(bokeh.layouts.column(
-        date_picker,
-        radio_group,
+        time_controls.date_picker,
+        time_controls.radio_group,
         dropdown,
         name="controls"))
     document.title = config.title
+
+
+class Observable(object):
+    def __init__(self):
+        self.callbacks = []
+
+    def on_change(self, attr, callback):
+        self.callbacks.append(callback)
+
+    def notify(self, new):
+        attr, old = None, None
+        for cb in self.callbacks:
+            cb(attr, old, new)
+
+
+class TimeControls(Observable):
+    def __init__(self):
+        self._date = None
+        self._time = None
+        self.date_picker = bokeh.models.DatePicker()
+        self.date_picker.on_change("value", self.on_date)
+        self.radio_group = bokeh.models.RadioGroup(
+            labels=["00:00", "12:00"],
+            inline=True,
+            active=0,
+            css_classes=[
+                "bonsai-mg-lf-10",
+                "bonsai-lh-24"])
+        self.radio_group.on_change("active", self.on_time)
+        super().__init__()
+
+    def on_time(self, attr, old, new):
+        if new == 0:
+            hour = 0
+        else:
+            hour = 12
+        self._time = dt.time(hour)
+        self.announce()
+
+    def on_date(self, attr, old, new):
+        self._date = new
+        self.announce()
+
+    def announce(self):
+        for value in [self._date, self._time]:
+            if value is None:
+                return
+        self.notify(dt.datetime(
+            self._date.year,
+            self._date.month,
+            self._date.day,
+            self._time.hour))
 
 
 class FileSystem(object):
@@ -172,19 +218,9 @@ class FileSystem(object):
     @staticmethod
     def find_file(paths, date):
         """Search for file matching date"""
-        if isinstance(date, dt.date):
-            for path in paths:
-                file_time = model_run_time(path)
-                print(file_time, path)
-                if (
-                        (file_time.year == date.year) and
-                        (file_time.month == date.month) and
-                        (file_time.day == date.day)):
-                    return path
-        else:
-            for path in paths:
-                if model_run_time(path) == date:
-                    return path
+        for path in paths:
+            if model_run_time(path) == date:
+                return path
 
 
 def model_run_time(path):
@@ -355,6 +391,11 @@ class Title(object):
             words.append(state["model"])
         if "date" in state:
             words.append("{:%Y-%m-%d %H:%M}".format(state["date"]))
+        if "path" in state:
+            with netCDF4.Dataset(state["path"]) as dataset:
+                var = dataset.variables["time_2"]
+                time = netCDF4.num2date(var[0], units=var.units)
+                words.append("{:%Y-%m-%d %H:%M}".format(time))
         text = " ".join(words)
         self.render(text)
 
