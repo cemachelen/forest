@@ -1,6 +1,7 @@
 # pylint: disable=missing-docstring, invalid-name
 import unittest
 import unittest.mock
+import datetime as dt
 import os
 import yaml
 import bokeh.plotting
@@ -64,14 +65,6 @@ class TestConfig(unittest.TestCase):
             yaml.dump(settings, stream)
         result = main.Config.load(self.path).model_names
         expect = ["A", "B"]
-        self.assertEqual(expect, result)
-
-    def test_model_pattern(self):
-        config = main.Config(models=[
-            {"name": "A", "pattern": "a.nc"},
-            {"name": "B", "pattern": "b.nc"}])
-        result = config.model_pattern("A")
-        expect = "a.nc"
         self.assertEqual(expect, result)
 
     def test_model_dir(self):
@@ -163,3 +156,46 @@ class TestStretchY(unittest.TestCase):
         result = transform(values, axis=1)
         expect = [[0, 0.75, 2]]
         np.testing.assert_array_almost_equal(expect, result)
+
+
+class TestFileSystem(unittest.TestCase):
+    def setUp(self):
+        self.file_system = main.FileSystem()
+
+    def test_model_run_time_given_file_name(self):
+        result = main.model_run_time("/some/file/takm4p4_20190305T1200Z.nc")
+        expect = dt.datetime(2019, 3, 5, 12)
+        self.assertEqual(expect, result)
+
+    def test_model_run_time_given_different_time(self):
+        result = main.model_run_time("/some/file/ga6_20180105T0000Z.nc")
+        expect = dt.datetime(2018, 1, 5)
+        self.assertEqual(expect, result)
+
+    def test_find_file_by_date(self):
+        paths = [
+            "/some/file_20180101T0000Z.nc",
+            "/some/file_20180101T1200Z.nc",
+            "/some/file_20180102T1200Z.nc"]
+        date = dt.datetime(2018, 1, 2, 12)
+        result = self.file_system.find_file(paths, date)
+        expect = "/some/file_20180102T1200Z.nc"
+        self.assertEqual(expect, result)
+
+    def test_find_file_given_date_not_datetime(self):
+        paths = [
+            "/some/file_20180101T0000Z.nc",
+            "/some/file_20180101T1200Z.nc",
+            "/some/file_20180102T1200Z.nc"]
+        date = dt.date(2018, 1, 2)
+        result = self.file_system.find_file(paths, date)
+        expect = "/some/file_20180102T1200Z.nc"
+        self.assertEqual(expect, result)
+
+    def test_full_pattern(self):
+        file_system = main.FileSystem(models=[
+            {"name": "A", "pattern": "a.nc"},
+            {"name": "B", "pattern": "b.nc"}])
+        result = file_system.full_pattern("A")
+        expect = "a.nc"
+        self.assertEqual(expect, result)

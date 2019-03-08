@@ -1,5 +1,7 @@
 """Minimalist implementation of FOREST"""
 from collections import defaultdict
+import datetime as dt
+import re
 import os
 import glob
 import yaml
@@ -43,11 +45,6 @@ class Config(object):
     def model_names(self):
         return [model["name"] for model in self.models]
 
-    def model_pattern(self, name):
-        for model in self.models:
-            if name == model["name"]:
-                return model["pattern"]
-
     @classmethod
     def load(cls, path):
         return cls(**cls.load_dict(path))
@@ -87,6 +84,7 @@ def main():
         model_dir=config.model_dir)
     file_system.on_change("path", state.on_change("path"))
     state.register(file_system, "model")
+    state.register(file_system, "date")
 
     figure = full_screen_figure(
         lon_range=config.lon_range,
@@ -110,6 +108,12 @@ def main():
     date_picker = bokeh.models.DatePicker()
     date_picker.on_change("value", state.on_change("date"))
 
+    radio_group = bokeh.models.RadioGroup(
+        labels=["00:00", "12:00"],
+        inline=True,
+        active=0,
+        css_classes=["bonsai-mg-lf-10"])
+
     document = bokeh.plotting.curdoc()
     messenger = Messenger(figure)
     image = AsyncImage(
@@ -126,6 +130,7 @@ def main():
     document.add_root(toolbar_box)
     document.add_root(bokeh.layouts.column(
         date_picker,
+        radio_group,
         dropdown,
         name="controls"))
     document.title = config.title
@@ -133,8 +138,10 @@ def main():
 
 class FileSystem(object):
     def __init__(self,
-                 models,
+                 models=None,
                  model_dir=None):
+        if models is None:
+            models = []
         self.models = models
         self.model_dir = model_dir
         self.callbacks = []
@@ -143,10 +150,13 @@ class FileSystem(object):
         self.callbacks.append(callback)
 
     def notify(self, state):
-        if "model" not in state:
-            return
-        pattern = self.full_pattern(state["model"])
-        path = sorted(glob.glob(pattern))[-1]
+        for attr in ["model", "date"]:
+            if attr not in state:
+                return
+        model, date = state["model"], state["date"]
+        pattern = self.full_pattern(model)
+        paths = sorted(glob.glob(pattern))
+        path = self.find_file(paths, date)
         for cb in self.callbacks:
             cb("path", None, path)
 
@@ -158,6 +168,29 @@ class FileSystem(object):
                     return pattern
                 else:
                     return os.path.join(self.model_dir, pattern)
+
+    @staticmethod
+    def find_file(paths, date):
+        """Search for file matching date"""
+        if isinstance(date, dt.date):
+            for path in paths:
+                file_time = model_run_time(path)
+                print(file_time, path)
+                if (
+                        (file_time.year == date.year) and
+                        (file_time.month == date.month) and
+                        (file_time.day == date.day)):
+                    return path
+        else:
+            for path in paths:
+                if model_run_time(path) == date:
+                    return path
+
+
+def model_run_time(path):
+    file_name = os.path.basename(path)
+    timestamp = re.search("[0-9]{8}T[0-9]{4}Z", file_name).group()
+    return dt.datetime.strptime(timestamp, "%Y%m%dT%H%MZ")
 
 
 class AsyncImage(object):
@@ -200,8 +233,13 @@ class AsyncImage(object):
     def notify(self, state):
         if "path" not in state:
             return
-        print("Image: {}".format(state["path"]))
-        blocking_task = partial(self.load, state["path"])
+        path = state["path"]
+        if path is None:
+            print("Missing path not implemented")
+            return
+        print("Image: {}".format(path))
+        print(model_run_time(path))
+        blocking_task = partial(self.load, path)
         self.document.add_next_tick_callback(
             partial(self.unlocked_task, blocking_task))
 
