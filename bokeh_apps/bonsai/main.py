@@ -200,7 +200,7 @@ class AsyncGlob(object):
         self.document = document
         self.messenger = messenger
         self.executor = executor
-    
+
     def glob(self, pattern, cb):
         self.document.add_next_tick_callback(
             partial(self.task, pattern, cb))
