@@ -182,16 +182,6 @@ class TestFileSystem(unittest.TestCase):
         expect = "/some/file_20180102T1200Z.nc"
         self.assertEqual(expect, result)
 
-    def test_find_file_given_date_not_datetime(self):
-        paths = [
-            "/some/file_20180101T0000Z.nc",
-            "/some/file_20180101T1200Z.nc",
-            "/some/file_20180102T1200Z.nc"]
-        date = dt.date(2018, 1, 2)
-        result = self.file_system.find_file(paths, date)
-        expect = "/some/file_20180102T1200Z.nc"
-        self.assertEqual(expect, result)
-
     def test_full_pattern(self):
         file_system = main.FileSystem(models=[
             {"name": "A", "pattern": "a.nc"},

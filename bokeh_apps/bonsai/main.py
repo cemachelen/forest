@@ -18,6 +18,10 @@ from functools import partial
 from bokeh.document import without_document_lock
 from concurrent.futures import ThreadPoolExecutor
 
+import sys
+sys.path.insert(0, os.path.dirname(__file__))
+from util import timed
+
 
 class Config(object):
     def __init__(self,
@@ -79,19 +83,29 @@ def main():
     state = State()
     state.register(Echo())
 
-    file_system = FileSystem(
-        models=config.models,
-        model_dir=config.model_dir)
-    file_system.on_change("path", state.on_change("path"))
-    state.register(file_system, "model")
-    state.register(file_system, "date")
-
     figure = full_screen_figure(
         lon_range=config.lon_range,
         lat_range=config.lat_range)
     toolbar_box = bokeh.models.ToolbarBox(
         toolbar=figure.toolbar,
         toolbar_location="below")
+
+    document = bokeh.plotting.curdoc()
+    messenger = Messenger(figure)
+    executor = ThreadPoolExecutor(max_workers=2)
+
+    async_glob = AsyncGlob(
+        document,
+        messenger,
+        executor)
+
+    file_system = FileSystem(
+        models=config.models,
+        model_dir=config.model_dir,
+        async_glob=async_glob)
+    file_system.on_change("path", state.on_change("path"))
+    state.register(file_system, "model")
+    state.register(file_system, "date")
 
     def select(dropdown):
         def on_click(value):
@@ -108,12 +122,11 @@ def main():
     time_controls = TimeControls()
     time_controls.on_change("datetime", state.on_change("date"))
 
-    document = bokeh.plotting.curdoc()
-    messenger = Messenger(figure)
     image = AsyncImage(
         document,
         figure,
-        messenger)
+        messenger,
+        executor)
     state.register(image, "path")
 
     title = Title(figure)
@@ -182,10 +195,30 @@ class TimeControls(Observable):
             self._time.hour))
 
 
+class AsyncGlob(object):
+    def __init__(self, document, messenger, executor):
+        self.document = document
+        self.messenger = messenger
+        self.executor = executor
+    
+    def glob(self, pattern, cb):
+        self.document.add_next_tick_callback(
+            partial(self.task, pattern, cb))
+
+    @gen.coroutine
+    @without_document_lock
+    def task(self, pattern, cb):
+        self.document.add_next_tick_callback(self.messenger.echo("Searching..."))
+        files = yield self.executor.submit(partial(glob.glob, pattern))
+        self.document.add_next_tick_callback(partial(cb, files))
+
+
 class FileSystem(object):
     def __init__(self,
                  models=None,
-                 model_dir=None):
+                 model_dir=None,
+                 async_glob=None):
+        self.async_glob = async_glob
         if models is None:
             models = []
         self.models = models
@@ -201,10 +234,12 @@ class FileSystem(object):
                 return
         model, date = state["model"], state["date"]
         pattern = self.full_pattern(model)
-        paths = sorted(glob.glob(pattern))
-        path = self.find_file(paths, date)
-        for cb in self.callbacks:
-            cb("path", None, path)
+
+        def glob_callback(paths):
+            path = self.find_file(paths, date)
+            for cb in self.callbacks:
+                cb("path", None, path)
+        self.async_glob.glob(pattern, glob_callback)
 
     def full_pattern(self, name):
         for model in self.models:
@@ -230,18 +265,20 @@ def model_run_time(path):
 
 
 class AsyncImage(object):
-    def __init__(self, document, figure, messenger):
+    def __init__(self, document, figure, messenger, executor):
         self.document = document
         self.figure = figure
         self.messenger = messenger
-        self.executor = ThreadPoolExecutor(max_workers=2)
-        self.source = bokeh.models.ColumnDataSource({
+        self.executor = executor
+        self.previous_tick = None
+        self.empty_data = {
             "x": [],
             "y": [],
             "dw": [],
             "dh": [],
             "image": []
-        })
+        }
+        self.source = bokeh.models.ColumnDataSource(self.empty_data)
         color_mapper = bokeh.models.LinearColorMapper(
             palette="RdYlBu11",
             nan_color=bokeh.colors.RGB(0, 0, 0, a=0),
@@ -271,12 +308,20 @@ class AsyncImage(object):
             return
         path = state["path"]
         if path is None:
-            print("Missing path not implemented")
+            self.document.add_next_tick_callback(
+                partial(self.render, self.empty_data))
+            self.document.add_next_tick_callback(
+                self.messenger.on_file_not_found)
             return
         print("Image: {}".format(path))
         print(model_run_time(path))
+        if self.previous_tick is not None:
+            try:
+                self.document.remove_next_tick_callback(self.previous_tick)
+            except ValueError:
+                print("Previous callback either already started or not added")
         blocking_task = partial(self.load, path)
-        self.document.add_next_tick_callback(
+        self.previous_tick = self.document.add_next_tick_callback(
             partial(self.unlocked_task, blocking_task))
 
     @gen.coroutine
@@ -340,9 +385,30 @@ class Messenger(object):
         self.label = bokeh.models.Label(
             x=0,
             y=0,
+            x_units="screen",
+            y_units="screen",
+            text_align="center",
+            text_baseline="top",
             text="",
             text_font_style="bold")
-        self.figure.add_layout(self.label)
+        figure.add_layout(self.label)
+        custom_js = bokeh.models.CustomJS(
+            args=dict(label=self.label), code="""
+                label.x = cb_obj.layout_width / 2
+                label.y = cb_obj.layout_height / 2
+            """)
+        figure.js_on_change("layout_width", custom_js)
+        figure.js_on_change("layout_height", custom_js)
+
+    def echo(self, message):
+        @gen.coroutine
+        def method():
+            self.render(message)
+        return method
+
+    @gen.coroutine
+    def erase(self):
+        self.label.text = ""
 
     @gen.coroutine
     def on_load(self):
@@ -352,14 +418,11 @@ class Messenger(object):
     def on_complete(self):
         self.render("")
 
+    @gen.coroutine
+    def on_file_not_found(self):
+        self.render("File not available")
+
     def render(self, text):
-        self.label.x = (
-            self.figure.x_range.start +
-            self.figure.x_range.end) / 2
-        dy = 0.5
-        self.label.y = (
-            (1 - dy) * self.figure.y_range.start +
-            dy * self.figure.y_range.end)
         self.label.text = text
 
 
@@ -391,11 +454,11 @@ class Title(object):
             words.append(state["model"])
         if "date" in state:
             words.append("{:%Y-%m-%d %H:%M}".format(state["date"]))
-        if "path" in state:
-            with netCDF4.Dataset(state["path"]) as dataset:
-                var = dataset.variables["time_2"]
-                time = netCDF4.num2date(var[0], units=var.units)
-                words.append("{:%Y-%m-%d %H:%M}".format(time))
+        # if "path" in state:
+        #     with netCDF4.Dataset(state["path"]) as dataset:
+        #         var = dataset.variables["time_2"]
+        #         time = netCDF4.num2date(var[0], units=var.units)
+        #         words.append("{:%Y-%m-%d %H:%M}".format(time))
         text = " ".join(words)
         self.render(text)
 
