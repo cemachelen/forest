@@ -118,7 +118,6 @@ def main():
         config.models,
         config.model_dir)
     file_patterns.register(pipeline.on_value)
-    pipeline.register(print)
     state.add_callback("model", file_patterns.on_model)
 
     def select(dropdown):
@@ -137,18 +136,17 @@ def main():
     time_controls.on_change("datetime", state.on_change("date"))
 
     forecast_tool = ForecastTool()
+    model_run = ModelRun()
+    pipeline.register(model_run.on_run_times)
+
+    model_run.on_change("run_date", state.on_change("date"))
+
+    def callback(attr, old, new):
+        print(attr, old, new)
+
+    forecast_tool.on_change("valid_date", callback)
+
     state.register(forecast_tool, "path")
-    button_width = 50
-    dim_radio_group = bokeh.models.RadioGroup(
-        labels=["Run", "Time", "Fcst. length"],
-        inline=True,
-        active=0,
-        css_classes=[
-            "bonsai-mg-lf-10",
-            "bonsai-lh-24"])
-    button_row = bokeh.layouts.row(
-        bokeh.models.Button(label="+", width=button_width),
-        bokeh.models.Button(label="-", width=button_width))
 
     image = AsyncImage(
         document,
@@ -167,9 +165,10 @@ def main():
         dropdown,
         time_controls.date_picker,
         time_controls.radio_group,
+        model_run.figure,
+        model_run.button_row,
         forecast_tool.figure,
-        dim_radio_group,
-        button_row,
+        forecast_tool.button_row,
         name="controls"))
     document.title = config.title
 
@@ -190,24 +189,111 @@ class Pipeline(object):
             callback(value)
 
 
-class ForecastTool(object):
+def navigation_figure(plot_height=240, toolbar_location="below"):
+    figure = bokeh.plotting.figure(
+        x_axis_type="datetime",
+        plot_height=plot_height,
+        plot_width=290,
+        tools="xwheel_zoom,ywheel_zoom,xpan,ypan,reset",
+        active_scroll="xwheel_zoom",
+        active_drag="xpan",
+        toolbar_location=toolbar_location)
+    figure.background_fill_alpha = 0.8
+    figure.border_fill_alpha = 0
+    figure.yaxis.visible = False
+    figure.toolbar.logo = None
+    return figure
+
+
+class Observable(object):
     def __init__(self):
-        self.figure = bokeh.plotting.figure(
-            x_axis_type="datetime",
-            plot_height=240,
-            plot_width=290,
-            tools="xwheel_zoom,ywheel_zoom,xpan,ypan,reset",
-            active_scroll="xwheel_zoom",
-            active_drag="xpan",
-            toolbar_location="below")
-        self.figure.background_fill_alpha = 0.8
-        self.figure.border_fill_alpha = 0
-        self.figure.yaxis.visible = False
-        self.figure.toolbar.logo = None
-        self.square_source = bokeh.models.ColumnDataSource({
+        self.callbacks = defaultdict(list)
+
+    def on_change(self, attr, callback):
+        self.callbacks[attr].append(callback)
+
+    def trigger(self, attr, value):
+        for cb in self.callbacks[attr]:
+            cb(attr, None, value)
+
+    def notify(self, new):
+        attr, old = None, None
+        for cbs in self.callbacks.values():
+            for cb in cbs:
+                cb(attr, old, new)
+
+
+class ModelRun(Observable):
+    def __init__(self):
+        self.figure = navigation_figure(
+            plot_height=90,
+            toolbar_location=None)
+        self.figure.title.text = "Run date"
+        self.source = bokeh.models.ColumnDataSource({
             "x": [],
             "y": []
         })
+        renderer = self.figure.square(
+            x="x",
+            y="y",
+            source=self.source)
+        renderer.selection_glyph = bokeh.models.Square(
+            fill_color="red",
+            line_color="red")
+        hover_tool = bokeh.models.HoverTool(
+            toggleable=False,
+            tooltips=[
+                ('run start', '@x{%Y-%m-%d %H:%M}')
+            ],
+            formatters={
+                'x': 'datetime'
+            },
+            renderers=[renderer]
+        )
+        self.figure.add_tools(hover_tool)
+        tap_tool = bokeh.models.TapTool()
+        self.figure.add_tools(tap_tool)
+        self.source.selected.on_change("indices", self.on_selection)
+
+        # Button row
+        width = 50
+        plus = bokeh.models.Button(label="+", width=width)
+        plus.on_click(self.on_plus)
+        minus = bokeh.models.Button(label="-", width=width)
+        minus.on_click(self.on_minus)
+        self.button_row = bokeh.layouts.row(plus, minus)
+        super().__init__()
+
+    def on_selection(self, attr, old, new):
+        if len(new) == 0:
+            return
+        i = new[0]
+        run_date = self.source.data["x"][i]
+        self.trigger("run_date", run_date)
+
+    def on_plus(self):
+        if len(self.source.selected.indices) == 0:
+            return
+        i = self.source.selected.indices[0] + 1
+        self.source.selected.indices = [i]
+
+    def on_minus(self):
+        if len(self.source.selected.indices) == 0:
+            return
+        i = self.source.selected.indices[0] - 1
+        self.source.selected.indices = [i]
+
+    def on_run_times(self, run_times):
+        self.source.data = {
+            "x": run_times,
+            "y": np.zeros(len(run_times))
+        }
+
+
+class ForecastTool(Observable):
+    def __init__(self):
+        self.figure = navigation_figure()
+        self.figure.title.text = "Forecast date"
         self.source = bokeh.models.ColumnDataSource({
             "top": [],
             "bottom": [],
@@ -215,10 +301,6 @@ class ForecastTool(object):
             "right": [],
             "start": [],
         })
-        self.figure.square(
-            x="x",
-            y="y",
-            source=self.square_source)
         renderer = self.figure.quad(
             top="top",
             bottom="bottom",
@@ -232,14 +314,16 @@ class ForecastTool(object):
             fill_color="red",
             line_color="red")
         hover_tool = bokeh.models.HoverTool(
+            toggleable=False,
             tooltips=[
                 ('time', '@left{%Y-%m-%d %H:%M}'),
-                ('length', 'T@bottom{%+i}'),
+                ('length', 'T@bottom{%+i} to T@top{%+i}'),
                 ('run start', '@start{%Y-%m-%d %H:%M}')
             ],
             formatters={
                 'left': 'datetime',
                 'bottom': 'printf',
+                'top': 'printf',
                 'start': 'datetime'},
             renderers=[renderer]
         )
@@ -247,12 +331,20 @@ class ForecastTool(object):
         tap_tool = bokeh.models.TapTool()
         self.figure.add_tools(tap_tool)
         self.starts = set()
+        self.source.selected.on_change("indices", self.on_selection)
+        # Button row
+        button_width = 50
+        self.button_row = bokeh.layouts.row(
+            bokeh.models.Button(label="+", width=button_width),
+            bokeh.models.Button(label="-", width=button_width))
+        super().__init__()
 
-    def on_run_times(self, run_times):
-        self.square_source.data = {
-            "x": run_times,
-            "y": np.zeros(len(run_times))
-        }
+    def on_selection(self, attr, old, new):
+        if len(new) == 0:
+            return
+        i = new[0]
+        date = self.source.data["left"][i]
+        self.trigger("valid_date", date)
 
     def notify(self, state):
         path = state["path"]
@@ -282,19 +374,6 @@ class ForecastTool(object):
             "right": right,
             "start": start
         }
-
-
-class Observable(object):
-    def __init__(self):
-        self.callbacks = []
-
-    def on_change(self, attr, callback):
-        self.callbacks.append(callback)
-
-    def notify(self, new):
-        attr, old = None, None
-        for cb in self.callbacks:
-            cb(attr, old, new)
 
 
 class TimeControls(Observable):

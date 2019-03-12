@@ -261,18 +261,6 @@ class TestTimeControls(unittest.TestCase):
 
 
 class TestForecastTool(unittest.TestCase):
-    def test_on_run_times(self):
-        time = dt.datetime(2019, 1, 1)
-        forecast_tool = main.ForecastTool()
-        forecast_tool.on_run_times([time])
-        result = forecast_tool.square_source.data
-        expect = {
-            "x": [time],
-            "y": [0]
-        }
-        for k, v in expect.items():
-            np.testing.assert_array_equal(v, result[k])
-
     def test_data_from_bounds(self):
         units = "hours since 1970-01-01 00:00:00"
         bounds = np.array([[24, 27],
@@ -308,3 +296,32 @@ class TestForecastTool(unittest.TestCase):
         }
         for k, v in expect.items():
             np.testing.assert_array_equal(v, result[k])
+
+    def test_on_run_times(self):
+        time = dt.datetime(2019, 1, 1)
+        tool = main.ModelRun()
+        tool.on_run_times([time])
+        result = tool.source.data
+        expect = {
+            "x": [time],
+            "y": [0]
+        }
+        for k, v in expect.items():
+            np.testing.assert_array_equal(v, result[k])
+
+
+class TestObservable(unittest.TestCase):
+    def test_trigger(self):
+        cb = unittest.mock.Mock()
+        observable = main.Observable()
+        observable.on_change("attr", cb)
+        observable.trigger("attr", "value")
+        cb.assert_called_once_with("attr", None, "value")
+
+    def test_on_change_selectively_calls_callbacks(self):
+        cb = unittest.mock.Mock()
+        observable = main.Observable()
+        observable.on_change("B", cb)
+        observable.trigger("A", "value")
+        observable.trigger("B", "value")
+        cb.assert_called_once_with("B", None, "value")
