@@ -194,6 +194,54 @@ class TestFileSystem(unittest.TestCase):
         self.assertEqual(expect, result)
 
 
+class TestFilePatterns(unittest.TestCase):
+    def test_on_model(self):
+        cb = unittest.mock.Mock()
+        patterns = main.FilePatterns({
+            "A": "*.nc"
+        })
+        patterns.register(cb)
+        patterns.on_model("A")
+        cb.assert_called_once_with("*.nc")
+
+    def test_from_dir(self):
+        patterns = main.FilePatterns.from_config([{
+            "name": "A",
+            "pattern": "*.nc"
+        }], directory="/some/dir")
+        result = patterns.table
+        expect = {
+            "A": "/some/dir/*.nc"
+        }
+        self.assertEqual(expect, result)
+
+    def test_state_interface(self):
+        state = main.State()
+        callback = unittest.mock.Mock()
+        state.add_callback("model", callback)
+        state.trigger("model", "A")
+        callback.assert_called_once_with("A")
+
+    def test_callback_chain(self):
+        def a(value):
+            return 5 * value
+
+        def b(value):
+            return 5 * value
+        c = compose(a, b)
+        result = c(5)
+        expect = 125
+        self.assertEqual(expect, result)
+
+
+def compose(*funcs):
+    def composed(value):
+        for func in funcs:
+            value = func(value)
+        return value
+    return composed
+
+
 class TestTimeControls(unittest.TestCase):
     def test_time_controls(self):
         cb = unittest.mock.Mock()
@@ -212,13 +260,25 @@ class TestTimeControls(unittest.TestCase):
         cb.assert_called_once_with(None, None, dt.datetime(2019, 1, 1, 12))
 
 
-class TestDates(unittest.TestCase):
+class TestForecastTool(unittest.TestCase):
+    def test_on_run_times(self):
+        time = dt.datetime(2019, 1, 1)
+        forecast_tool = main.ForecastTool()
+        forecast_tool.on_run_times([time])
+        result = forecast_tool.square_source.data
+        expect = {
+            "x": [time],
+            "y": [0]
+        }
+        for k, v in expect.items():
+            np.testing.assert_array_equal(v, result[k])
+
     def test_data_from_bounds(self):
         units = "hours since 1970-01-01 00:00:00"
         bounds = np.array([[24, 27],
                            [27, 30],
                            [30, 33]], dtype=np.float64)
-        result = main.data_from_bounds(bounds, units)
+        result = main.ForecastTool.data(bounds, units)
         expect = {
             "top": [
                 3,

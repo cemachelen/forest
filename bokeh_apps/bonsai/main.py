@@ -107,6 +107,20 @@ def main():
     state.register(file_system, "model")
     state.register(file_system, "date")
 
+    @timed
+    def process(pattern):
+        paths = glob.glob(pattern)
+        dates = [model_run_time(path) for path in paths]
+        return sorted(dates)
+
+    pipeline = Pipeline(process)
+    file_patterns = FilePatterns.from_config(
+        config.models,
+        config.model_dir)
+    file_patterns.register(pipeline.on_value)
+    pipeline.register(print)
+    state.add_callback("model", file_patterns.on_model)
+
     def select(dropdown):
         def on_click(value):
             dropdown.label = value
@@ -160,6 +174,22 @@ def main():
     document.title = config.title
 
 
+class Pipeline(object):
+    def __init__(self, process):
+        self.process = process
+        self.callbacks = []
+
+    def on_value(self, value):
+        self.emit(self.process(value))
+
+    def register(self, callback):
+        self.callbacks.append(callback)
+
+    def emit(self, value):
+        for callback in self.callbacks:
+            callback(value)
+
+
 class ForecastTool(object):
     def __init__(self):
         self.figure = bokeh.plotting.figure(
@@ -174,6 +204,10 @@ class ForecastTool(object):
         self.figure.border_fill_alpha = 0
         self.figure.yaxis.visible = False
         self.figure.toolbar.logo = None
+        self.square_source = bokeh.models.ColumnDataSource({
+            "x": [],
+            "y": []
+        })
         self.source = bokeh.models.ColumnDataSource({
             "top": [],
             "bottom": [],
@@ -181,6 +215,10 @@ class ForecastTool(object):
             "right": [],
             "start": [],
         })
+        self.figure.square(
+            x="x",
+            y="y",
+            source=self.square_source)
         renderer = self.figure.quad(
             top="top",
             bottom="bottom",
@@ -210,19 +248,40 @@ class ForecastTool(object):
         self.figure.add_tools(tap_tool)
         self.starts = set()
 
+    def on_run_times(self, run_times):
+        self.square_source.data = {
+            "x": run_times,
+            "y": np.zeros(len(run_times))
+        }
+
     def notify(self, state):
         path = state["path"]
         if path is None:
             return
-        print("ForecastControls: {}".format(state["path"]))
         with netCDF4.Dataset(path) as dataset:
             units = dataset.variables["time_2"].units
             bounds = dataset.variables["time_2_bnds"][:]
-        data = data_from_bounds(bounds, units)
+        data = self.data(bounds, units)
         start = data["start"][0]
         if start not in self.starts:
             self.source.stream(data)
             self.starts.add(start)
+
+    @staticmethod
+    def data(bounds, units):
+        """Helper to convert from netCDF4 values to bokeh source"""
+        top = bounds[:, 1] - bounds[0, 0]
+        bottom = bounds[:, 0] - bounds[0, 0]
+        left = netCDF4.num2date(bounds[:, 0], units=units)
+        right = netCDF4.num2date(bounds[:, 1], units=units)
+        start = np.full(len(left), left[0], dtype=object)
+        return {
+            "top": top,
+            "bottom": bottom,
+            "left": left,
+            "right": right,
+            "start": start
+        }
 
 
 class Observable(object):
@@ -338,6 +397,30 @@ class FileSystem(object):
         for path in paths:
             if model_run_time(path) == date:
                 return path
+
+
+class FilePatterns(object):
+    def __init__(self, table):
+        self.table = table
+        self.callbacks = []
+
+    @classmethod
+    def from_config(cls, models, directory=None):
+        table = {}
+        for entry in models:
+            name, pattern = entry["name"], entry["pattern"]
+            if directory is not None:
+                pattern = os.path.join(directory, pattern)
+            table[name] = pattern
+        return cls(table)
+
+    def register(self, callback):
+        self.callbacks.append(callback)
+
+    def on_model(self, key):
+        pattern = self.table[key]
+        for callback in self.callbacks:
+            callback(pattern)
 
 
 def model_run_time(path):
@@ -536,11 +619,6 @@ class Title(object):
             words.append(state["model"])
         if "date" in state:
             words.append("{:%Y-%m-%d %H:%M}".format(state["date"]))
-        # if "path" in state:
-        #     with netCDF4.Dataset(state["path"]) as dataset:
-        #         var = dataset.variables["time_2"]
-        #         time = netCDF4.num2date(var[0], units=var.units)
-        #         words.append("{:%Y-%m-%d %H:%M}".format(time))
         text = " ".join(words)
         self.render(text)
 
@@ -553,36 +631,21 @@ class Echo(object):
         print(state)
 
 
-def data_from_bounds(bounds, units):
-    """Helper to convert from netCDF4 values to bokeh source"""
-    top = bounds[:, 1] - bounds[0, 0]
-    bottom = bounds[:, 0] - bounds[0, 0]
-    left = netCDF4.num2date(bounds[:, 0], units=units)
-    right = netCDF4.num2date(bounds[:, 1], units=units)
-    start = np.full(len(left), left[0], dtype=object)
-    return {
-        "top": top,
-        "bottom": bottom,
-        "left": left,
-        "right": right,
-        "start": start
-    }
-
-
 class State(object):
     def __init__(self):
         self.state = {}
         self.subscribers = []
         self.special_subscribers = defaultdict(list)
+        self.callbacks = defaultdict(list)
 
     def on(self, attr):
         def callback(value):
-            self.announce(attr, value)
+            self.trigger(attr, value)
         return callback
 
     def on_change(self, state_attr):
         def callback(attr, old, new):
-            self.announce(state_attr, new)
+            self.trigger(state_attr, new)
         return callback
 
     def register(self, subscriber, state_attr=None):
@@ -591,13 +654,18 @@ class State(object):
         else:
             self.special_subscribers[state_attr].append(subscriber)
 
-    def announce(self, attr, value):
+    def add_callback(self, attr, callback):
+        self.callbacks[attr].append(callback)
+
+    def trigger(self, attr, value):
         self.state = dict(self.state)
         self.state[attr] = value
         for s in self.subscribers:
             s.notify(self.state)
         for s in self.special_subscribers[attr]:
             s.notify(self.state)
+        for cb in self.callbacks[attr]:
+            cb(self.state[attr])
 
 
 def full_screen_figure(
