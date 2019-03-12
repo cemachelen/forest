@@ -7,6 +7,7 @@ import yaml
 import bokeh.plotting
 import main
 import numpy as np
+import netCDF4
 
 
 class TestEnvironment(unittest.TestCase):
@@ -131,13 +132,15 @@ class TestPubSub(unittest.TestCase):
 
 class TestImage(unittest.TestCase):
     def test_constructor(self):
+        executor = None
         document = bokeh.plotting.curdoc()
         figure = bokeh.plotting.figure()
         messenger = main.Messenger(figure)
         image = main.AsyncImage(
             document,
             figure,
-            messenger)
+            messenger,
+            executor)
 
 
 class TestConvertUnits(unittest.TestCase):
@@ -207,3 +210,41 @@ class TestTimeControls(unittest.TestCase):
         time_controls.on_date(None, None, dt.date(2019, 1, 1))
         time_controls.on_time(None, None, 1)
         cb.assert_called_once_with(None, None, dt.datetime(2019, 1, 1, 12))
+
+
+class TestDates(unittest.TestCase):
+    def test_data_from_bounds(self):
+        units = "hours since 1970-01-01 00:00:00"
+        bounds = np.array([[24, 27],
+                           [27, 30],
+                           [30, 33]], dtype=np.float64)
+        result = main.data_from_bounds(bounds, units)
+        expect = {
+            "top": [
+                3,
+                6,
+                9
+            ],
+            "bottom": [
+                0,
+                3,
+                6
+            ],
+            "left": [
+                dt.datetime(1970, 1, 2, 0),
+                dt.datetime(1970, 1, 2, 3),
+                dt.datetime(1970, 1, 2, 6),
+            ],
+            "right": [
+                dt.datetime(1970, 1, 2, 3),
+                dt.datetime(1970, 1, 2, 6),
+                dt.datetime(1970, 1, 2, 9),
+            ],
+            "start": [
+                dt.datetime(1970, 1, 2, 0),
+                dt.datetime(1970, 1, 2, 0),
+                dt.datetime(1970, 1, 2, 0),
+            ]
+        }
+        for k, v in expect.items():
+            np.testing.assert_array_equal(v, result[k])

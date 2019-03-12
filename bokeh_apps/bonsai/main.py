@@ -122,6 +122,20 @@ def main():
     time_controls = TimeControls()
     time_controls.on_change("datetime", state.on_change("date"))
 
+    forecast_tool = ForecastTool()
+    state.register(forecast_tool, "path")
+    button_width = 50
+    dim_radio_group = bokeh.models.RadioGroup(
+        labels=["Run", "Time", "Fcst. length"],
+        inline=True,
+        active=0,
+        css_classes=[
+            "bonsai-mg-lf-10",
+            "bonsai-lh-24"])
+    button_row = bokeh.layouts.row(
+        bokeh.models.Button(label="+", width=button_width),
+        bokeh.models.Button(label="-", width=button_width))
+
     image = AsyncImage(
         document,
         figure,
@@ -136,11 +150,79 @@ def main():
     document.add_root(figure)
     document.add_root(toolbar_box)
     document.add_root(bokeh.layouts.column(
+        dropdown,
         time_controls.date_picker,
         time_controls.radio_group,
-        dropdown,
+        forecast_tool.figure,
+        dim_radio_group,
+        button_row,
         name="controls"))
     document.title = config.title
+
+
+class ForecastTool(object):
+    def __init__(self):
+        self.figure = bokeh.plotting.figure(
+            x_axis_type="datetime",
+            plot_height=240,
+            plot_width=290,
+            tools="xwheel_zoom,ywheel_zoom,xpan,ypan,reset",
+            active_scroll="xwheel_zoom",
+            active_drag="xpan",
+            toolbar_location="below")
+        self.figure.background_fill_alpha = 0.8
+        self.figure.border_fill_alpha = 0
+        self.figure.yaxis.visible = False
+        self.figure.toolbar.logo = None
+        self.source = bokeh.models.ColumnDataSource({
+            "top": [],
+            "bottom": [],
+            "left": [],
+            "right": [],
+            "start": [],
+        })
+        renderer = self.figure.quad(
+            top="top",
+            bottom="bottom",
+            left="left",
+            right="right",
+            source=self.source)
+        renderer.hover_glyph = bokeh.models.Quad(
+            fill_color="red",
+            line_color="red")
+        renderer.selection_glyph = bokeh.models.Quad(
+            fill_color="red",
+            line_color="red")
+        hover_tool = bokeh.models.HoverTool(
+            tooltips=[
+                ('time', '@left{%Y-%m-%d %H:%M}'),
+                ('length', 'T@bottom{%+i}'),
+                ('run start', '@start{%Y-%m-%d %H:%M}')
+            ],
+            formatters={
+                'left': 'datetime',
+                'bottom': 'printf',
+                'start': 'datetime'},
+            renderers=[renderer]
+        )
+        self.figure.add_tools(hover_tool)
+        tap_tool = bokeh.models.TapTool()
+        self.figure.add_tools(tap_tool)
+        self.starts = set()
+
+    def notify(self, state):
+        path = state["path"]
+        if path is None:
+            return
+        print("ForecastControls: {}".format(state["path"]))
+        with netCDF4.Dataset(path) as dataset:
+            units = dataset.variables["time_2"].units
+            bounds = dataset.variables["time_2_bnds"][:]
+        data = data_from_bounds(bounds, units)
+        start = data["start"][0]
+        if start not in self.starts:
+            self.source.stream(data)
+            self.starts.add(start)
 
 
 class Observable(object):
@@ -469,6 +551,22 @@ class Title(object):
 class Echo(object):
     def notify(self, state):
         print(state)
+
+
+def data_from_bounds(bounds, units):
+    """Helper to convert from netCDF4 values to bokeh source"""
+    top = bounds[:, 1] - bounds[0, 0]
+    bottom = bounds[:, 0] - bounds[0, 0]
+    left = netCDF4.num2date(bounds[:, 0], units=units)
+    right = netCDF4.num2date(bounds[:, 1], units=units)
+    start = np.full(len(left), left[0], dtype=object)
+    return {
+        "top": top,
+        "bottom": bottom,
+        "left": left,
+        "right": right,
+        "start": start
+    }
 
 
 class State(object):
