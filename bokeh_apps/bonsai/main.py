@@ -332,11 +332,14 @@ class ForecastTool(Observable):
         self.figure.add_tools(tap_tool)
         self.starts = set()
         self.source.selected.on_change("indices", self.on_selection)
+
         # Button row
-        button_width = 50
-        self.button_row = bokeh.layouts.row(
-            bokeh.models.Button(label="+", width=button_width),
-            bokeh.models.Button(label="-", width=button_width))
+        width = 50
+        plus = bokeh.models.Button(label="+", width=width)
+        plus.on_click(self.on_plus)
+        minus = bokeh.models.Button(label="-", width=width)
+        minus.on_click(self.on_minus)
+        self.button_row = bokeh.layouts.row(plus, minus)
         super().__init__()
 
     def on_selection(self, attr, old, new):
@@ -345,6 +348,18 @@ class ForecastTool(Observable):
         i = new[0]
         date = self.source.data["left"][i]
         self.trigger("valid_date", date)
+
+    def on_plus(self):
+        if len(self.source.selected.indices) == 0:
+            return
+        i = self.source.selected.indices[0] + 1
+        self.source.selected.indices = [i]
+
+    def on_minus(self):
+        if len(self.source.selected.indices) == 0:
+            return
+        i = self.source.selected.indices[0] - 1
+        self.source.selected.indices = [i]
 
     def notify(self, state):
         path = state["path"]
