@@ -105,19 +105,19 @@ def main():
         async_glob=async_glob)
     file_system.on_change("path", state.on_change("path"))
     state.register(file_system, "model")
-    state.register(file_system, "date")
+    state.register(file_system, "run_date")
 
     @timed
-    def process(pattern):
+    def process_files(pattern):
         paths = glob.glob(pattern)
         dates = [model_run_time(path) for path in paths]
         return sorted(dates)
 
-    pipeline = Pipeline(process)
+    pipeline = Pipeline(process_files)
     file_patterns = FilePatterns.from_config(
         config.models,
         config.model_dir)
-    file_patterns.register(pipeline.on_value)
+    file_patterns.on_change("pattern", pipeline.on_change)
     state.add_callback("model", file_patterns.on_model)
 
     def select(dropdown):
@@ -133,18 +133,17 @@ def main():
     dropdown.on_click(state.on("model"))
 
     time_controls = TimeControls()
-    time_controls.on_change("datetime", state.on_change("date"))
+    time_controls.on_change("datetime", state.on_change("run_date"))
 
     forecast_tool = ForecastTool()
     model_run = ModelRun()
     pipeline.register(model_run.on_run_times)
 
-    model_run.on_change("run_date", state.on_change("date"))
-
-    def callback(attr, old, new):
-        print(attr, old, new)
-
-    forecast_tool.on_change("valid_date", callback)
+    model_run.on_change("run_date", state.on_change("run_date"))
+    forecast_tool.on_change("run_date", state.on_change("run_date"))
+    forecast_tool.on_change("run_date", model_run.on_run_date)
+    forecast_tool.on_change("valid_date", state.on_change("valid_date"))
+    forecast_tool.on_change("index", state.on_change("index"))
 
     state.register(forecast_tool, "path")
 
@@ -154,10 +153,12 @@ def main():
         messenger,
         executor)
     state.register(image, "path")
+    state.register(image, "index")
 
     title = Title(figure)
     state.register(title, "model")
-    state.register(title, "date")
+    state.register(title, "run_date")
+    state.register(title, "valid_date")
 
     document.add_root(figure)
     document.add_root(toolbar_box)
@@ -178,7 +179,7 @@ class Pipeline(object):
         self.process = process
         self.callbacks = []
 
-    def on_value(self, value):
+    def on_change(self, attr, old, value):
         self.emit(self.process(value))
 
     def register(self, callback):
@@ -283,6 +284,12 @@ class ModelRun(Observable):
         i = self.source.selected.indices[0] - 1
         self.source.selected.indices = [i]
 
+    def on_run_date(self, attr, old, new):
+        run_times = list(self.source.data["x"])
+        if new in run_times:
+            i = run_times.index(new)
+            self.source.selected.indices = [i]
+
     def on_run_times(self, run_times):
         self.source.data = {
             "x": run_times,
@@ -300,6 +307,7 @@ class ForecastTool(Observable):
             "left": [],
             "right": [],
             "start": [],
+            "index": []
         })
         renderer = self.figure.quad(
             top="top",
@@ -346,8 +354,9 @@ class ForecastTool(Observable):
         if len(new) == 0:
             return
         i = new[0]
-        date = self.source.data["left"][i]
-        self.trigger("valid_date", date)
+        self.trigger("run_date", self.source.data["start"][i])
+        self.trigger("valid_date", self.source.data["left"][i])
+        self.trigger("index", self.source.data["index"][i])
 
     def on_plus(self):
         if len(self.source.selected.indices) == 0:
@@ -360,6 +369,9 @@ class ForecastTool(Observable):
             return
         i = self.source.selected.indices[0] - 1
         self.source.selected.indices = [i]
+
+    def on_run_date(self, attr, old, new):
+        pass
 
     def notify(self, state):
         path = state["path"]
@@ -382,12 +394,14 @@ class ForecastTool(Observable):
         left = netCDF4.num2date(bounds[:, 0], units=units)
         right = netCDF4.num2date(bounds[:, 1], units=units)
         start = np.full(len(left), left[0], dtype=object)
+        index = np.arange(bounds.shape[0])
         return {
             "top": top,
             "bottom": bottom,
             "left": left,
             "right": right,
-            "start": start
+            "start": start,
+            "index": index
         }
 
 
@@ -464,10 +478,10 @@ class FileSystem(object):
         self.callbacks.append(callback)
 
     def notify(self, state):
-        for attr in ["model", "date"]:
+        for attr in ["model", "run_date"]:
             if attr not in state:
                 return
-        model, date = state["model"], state["date"]
+        model, date = state["model"], state["run_date"]
         pattern = self.full_pattern(model)
 
         def glob_callback(paths):
@@ -493,10 +507,10 @@ class FileSystem(object):
                 return path
 
 
-class FilePatterns(object):
+class FilePatterns(Observable):
     def __init__(self, table):
         self.table = table
-        self.callbacks = []
+        super().__init__()
 
     @classmethod
     def from_config(cls, models, directory=None):
@@ -508,13 +522,9 @@ class FilePatterns(object):
             table[name] = pattern
         return cls(table)
 
-    def register(self, callback):
-        self.callbacks.append(callback)
-
     def on_model(self, key):
         pattern = self.table[key]
-        for callback in self.callbacks:
-            callback(pattern)
+        self.trigger("pattern", pattern)
 
 
 def model_run_time(path):
@@ -565,21 +575,23 @@ class AsyncImage(object):
     def notify(self, state):
         if "path" not in state:
             return
+        if "index" not in state:
+            return
         path = state["path"]
+        index = state["index"]
         if path is None:
             self.document.add_next_tick_callback(
                 partial(self.render, self.empty_data))
             self.document.add_next_tick_callback(
                 self.messenger.on_file_not_found)
             return
-        print("Image: {}".format(path))
-        print(model_run_time(path))
+        print("Image: {} {}".format(path, index))
         if self.previous_tick is not None:
             try:
                 self.document.remove_next_tick_callback(self.previous_tick)
             except ValueError:
                 print("Previous callback either already started or not added")
-        blocking_task = partial(self.load, path)
+        blocking_task = partial(self.load, path, index)
         self.previous_tick = self.document.add_next_tick_callback(
             partial(self.unlocked_task, blocking_task))
 
@@ -591,8 +603,7 @@ class AsyncImage(object):
         self.document.add_next_tick_callback(partial(self.render, data))
         self.document.add_next_tick_callback(self.messenger.on_complete)
 
-    def load(self, path):
-        i = 0
+    def load(self, path, index):
         with netCDF4.Dataset(path) as dataset:
             lons = dataset.variables["longitude_0"][:]
             lats = dataset.variables["latitude_0"][:]
@@ -600,7 +611,7 @@ class AsyncImage(object):
                 var = dataset.variables["stratiform_rainfall_rate"]
             except KeyError:
                 var = dataset.variables["precipitation_flux"]
-            values = var[i]
+            values = var[index]
             values = convert_units(values, var.units, "kg m-2 hour-1")
             gx, _ = transform(
                 lons,
@@ -711,8 +722,9 @@ class Title(object):
         words = []
         if "model" in state:
             words.append(state["model"])
-        if "date" in state:
-            words.append("{:%Y-%m-%d %H:%M}".format(state["date"]))
+        for date_attr in ["run_date", "valid_date"]:
+            if date_attr in state:
+                words.append("{:%Y-%m-%d %H:%M}".format(state[date_attr]))
         text = " ".join(words)
         self.render(text)
 

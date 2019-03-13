@@ -95,8 +95,7 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(expect, result)
 
 
-class TestPubSub(unittest.TestCase):
-    """Tiny publish/subscribe model to decouple views from controllers"""
+class TestState(unittest.TestCase):
     def setUp(self):
         self.state = main.State()
         self.view = unittest.mock.Mock()
@@ -200,9 +199,9 @@ class TestFilePatterns(unittest.TestCase):
         patterns = main.FilePatterns({
             "A": "*.nc"
         })
-        patterns.register(cb)
+        patterns.on_change("pattern", cb)
         patterns.on_model("A")
-        cb.assert_called_once_with("*.nc")
+        cb.assert_called_once_with("pattern", None, "*.nc")
 
     def test_from_dir(self):
         patterns = main.FilePatterns.from_config([{
@@ -268,16 +267,8 @@ class TestForecastTool(unittest.TestCase):
                            [30, 33]], dtype=np.float64)
         result = main.ForecastTool.data(bounds, units)
         expect = {
-            "top": [
-                3,
-                6,
-                9
-            ],
-            "bottom": [
-                0,
-                3,
-                6
-            ],
+            "top": [3, 6, 9],
+            "bottom": [0, 3, 6],
             "left": [
                 dt.datetime(1970, 1, 2, 0),
                 dt.datetime(1970, 1, 2, 3),
@@ -292,7 +283,8 @@ class TestForecastTool(unittest.TestCase):
                 dt.datetime(1970, 1, 2, 0),
                 dt.datetime(1970, 1, 2, 0),
                 dt.datetime(1970, 1, 2, 0),
-            ]
+            ],
+            "index": [0, 1, 2]
         }
         for k, v in expect.items():
             np.testing.assert_array_equal(v, result[k])
@@ -308,6 +300,15 @@ class TestForecastTool(unittest.TestCase):
         }
         for k, v in expect.items():
             np.testing.assert_array_equal(v, result[k])
+
+    def test_on_run_date(self):
+        data = {
+            "start": [],
+            "index": []
+        }
+        result = main.ForecastTool.indices(data, run_date, index)
+        expect = [0]
+        self.assertEqual(expect, result)
 
 
 class TestObservable(unittest.TestCase):
