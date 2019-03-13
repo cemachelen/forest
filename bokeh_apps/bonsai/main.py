@@ -133,14 +133,32 @@ def main():
         config.models,
         config.model_dir)
     patterns = rx.map(model_names, lambda v: table[v])
-    run_dates = rx.map(patterns, process_files)
+    all_run_dates = rx.map(patterns, process_files)
 
-    time_controls = TimeControls()
-    time_controls.on_change("datetime", state.on_change("run_date"))
+    # Time controls
+    dates = rx.Stream()
+    calendar = bokeh.models.DatePicker()
+    calendar.on_change("value", rx.on_change(dates))
+
+    clicks = rx.Stream()
+    radio_group = bokeh.models.RadioGroup(
+        labels=["00:00", "12:00"],
+        inline=True,
+        active=0,
+        css_classes=[
+            "bonsai-mg-lf-10",
+            "bonsai-lh-24"])
+    radio_group.on_change("active", rx.on_change(clicks))
+    times = rx.map(clicks, lambda i: dt.time(hour=i*12))
+
+    datetimes = rx.combine_latest(
+        (dates, times),
+        lambda d, t: dt.datetime(d.year, d.month, d.day, t.hour))
+    datetimes.subscribe(print)
 
     forecast_tool = ForecastTool()
     model_run = ModelRun()
-    run_dates.subscribe(model_run.on_run_times)
+    all_run_dates.subscribe(model_run.on_run_times)
 
     model_run.on_change("run_date", state.on_change("run_date"))
     forecast_tool.on_change("run_date", state.on_change("run_date"))
@@ -167,8 +185,8 @@ def main():
     document.add_root(toolbar_box)
     document.add_root(bokeh.layouts.column(
         dropdown,
-        time_controls.date_picker,
-        time_controls.radio_group,
+        calendar,
+        radio_group,
         model_run.figure,
         model_run.button_row,
         forecast_tool.figure,
@@ -390,45 +408,6 @@ class ForecastTool(Observable):
             "start": start,
             "index": index
         }
-
-
-class TimeControls(Observable):
-    def __init__(self):
-        self._date = None
-        self._time = None
-        self.date_picker = bokeh.models.DatePicker()
-        self.date_picker.on_change("value", self.on_date)
-        self.radio_group = bokeh.models.RadioGroup(
-            labels=["00:00", "12:00"],
-            inline=True,
-            active=0,
-            css_classes=[
-                "bonsai-mg-lf-10",
-                "bonsai-lh-24"])
-        self.radio_group.on_change("active", self.on_time)
-        super().__init__()
-
-    def on_time(self, attr, old, new):
-        if new == 0:
-            hour = 0
-        else:
-            hour = 12
-        self._time = dt.time(hour)
-        self.announce()
-
-    def on_date(self, attr, old, new):
-        self._date = new
-        self.announce()
-
-    def announce(self):
-        for value in [self._date, self._time]:
-            if value is None:
-                return
-        self.notify(dt.datetime(
-            self._date.year,
-            self._date.month,
-            self._date.day,
-            self._time.hour))
 
 
 class AsyncGlob(object):

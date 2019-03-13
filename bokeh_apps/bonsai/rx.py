@@ -102,3 +102,10 @@ def unique(stream):
 
     stream.subscribe(callback)
     return uniqued
+
+
+def on_change(stream):
+    """Convert callback(attr, old, new) to stream.emit(new)"""
+    def callback(attr, old, new):
+        stream.emit(new)
+    return callback

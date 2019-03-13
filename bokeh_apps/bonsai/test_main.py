@@ -205,24 +205,6 @@ class TestFilePatterns(unittest.TestCase):
         self.assertEqual(expect, result)
 
 
-class TestTimeControls(unittest.TestCase):
-    def test_time_controls(self):
-        cb = unittest.mock.Mock()
-        time_controls = main.TimeControls()
-        time_controls.on_change(None, cb)
-        time_controls.on_date(None, None, dt.date(2019, 1, 1))
-        time_controls.on_time(None, None, 0)
-        cb.assert_called_once_with(None, None, dt.datetime(2019, 1, 1, 0))
-
-    def test_on_time(self):
-        cb = unittest.mock.Mock()
-        time_controls = main.TimeControls()
-        time_controls.on_change("datetime", cb)
-        time_controls.on_date(None, None, dt.date(2019, 1, 1))
-        time_controls.on_time(None, None, 1)
-        cb.assert_called_once_with(None, None, dt.datetime(2019, 1, 1, 12))
-
-
 class TestForecastTool(unittest.TestCase):
     def test_data_from_bounds(self):
         units = "hours since 1970-01-01 00:00:00"
