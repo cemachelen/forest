@@ -69,6 +69,15 @@ class TestStream(unittest.TestCase):
         stream.emit(3)
         self.assert_has_calls(self.view, [1, 2, 3])
 
+    def test_merge(self):
+        streams = [rx.Stream(), rx.Stream()]
+        streams[0].emit(1)
+        merged = rx.merge(*streams)
+        merged.subscribe(self.view)
+        streams[1].emit(2)
+        streams[0].emit(3)
+        self.assert_has_calls(self.view, [1, 2, 3])
+
     def assert_has_calls(self, view, values):
         calls = [unittest.mock.call(v) for v in values]
         view.assert_has_calls(calls)

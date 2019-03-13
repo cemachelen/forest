@@ -81,6 +81,13 @@ def map(stream, transform):
     return mapped
 
 
+def merge(*streams):
+    merged = Stream()
+    for stream in streams:
+        stream.subscribe(merged.emit)
+    return merged
+
+
 def unique(stream):
     """Emit unique values from a stream
 
