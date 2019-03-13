@@ -20,6 +20,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import sys
 sys.path.insert(0, os.path.dirname(__file__))
+import rx
 from util import timed
 
 
@@ -113,13 +114,6 @@ def main():
         dates = [model_run_time(path) for path in paths]
         return sorted(dates)
 
-    pipeline = Pipeline(process_files)
-    file_patterns = FilePatterns.from_config(
-        config.models,
-        config.model_dir)
-    file_patterns.on_change("pattern", pipeline.on_change)
-    state.add_callback("model", file_patterns.on_model)
-
     def select(dropdown):
         def on_click(value):
             dropdown.label = value
@@ -132,12 +126,21 @@ def main():
     dropdown.on_click(select(dropdown))
     dropdown.on_click(state.on("model"))
 
+    model_names = rx.Stream()
+    dropdown.on_click(model_names.emit)
+
+    table = file_patterns(
+        config.models,
+        config.model_dir)
+    patterns = rx.map(model_names, lambda v: table[v])
+    run_dates = rx.map(patterns, process_files)
+
     time_controls = TimeControls()
     time_controls.on_change("datetime", state.on_change("run_date"))
 
     forecast_tool = ForecastTool()
     model_run = ModelRun()
-    pipeline.register(model_run.on_run_times)
+    run_dates.subscribe(model_run.on_run_times)
 
     model_run.on_change("run_date", state.on_change("run_date"))
     forecast_tool.on_change("run_date", state.on_change("run_date"))
@@ -172,22 +175,6 @@ def main():
         forecast_tool.button_row,
         name="controls"))
     document.title = config.title
-
-
-class Pipeline(object):
-    def __init__(self, process):
-        self.process = process
-        self.callbacks = []
-
-    def on_change(self, attr, old, value):
-        self.emit(self.process(value))
-
-    def register(self, callback):
-        self.callbacks.append(callback)
-
-    def emit(self, value):
-        for callback in self.callbacks:
-            callback(value)
 
 
 def navigation_figure(plot_height=240, toolbar_location="below"):
@@ -507,24 +494,14 @@ class FileSystem(object):
                 return path
 
 
-class FilePatterns(Observable):
-    def __init__(self, table):
-        self.table = table
-        super().__init__()
-
-    @classmethod
-    def from_config(cls, models, directory=None):
-        table = {}
-        for entry in models:
-            name, pattern = entry["name"], entry["pattern"]
-            if directory is not None:
-                pattern = os.path.join(directory, pattern)
-            table[name] = pattern
-        return cls(table)
-
-    def on_model(self, key):
-        pattern = self.table[key]
-        self.trigger("pattern", pattern)
+def file_patterns(models, directory=None):
+    table = {}
+    for entry in models:
+        name, pattern = entry["name"], entry["pattern"]
+        if directory is not None:
+            pattern = os.path.join(directory, pattern)
+        table[name] = pattern
+    return table
 
 
 def model_run_time(path):

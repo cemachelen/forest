@@ -194,51 +194,15 @@ class TestFileSystem(unittest.TestCase):
 
 
 class TestFilePatterns(unittest.TestCase):
-    def test_on_model(self):
-        cb = unittest.mock.Mock()
-        patterns = main.FilePatterns({
-            "A": "*.nc"
-        })
-        patterns.on_change("pattern", cb)
-        patterns.on_model("A")
-        cb.assert_called_once_with("pattern", None, "*.nc")
-
-    def test_from_dir(self):
-        patterns = main.FilePatterns.from_config([{
+    def test_file_patterns(self):
+        result = main.file_patterns([{
             "name": "A",
             "pattern": "*.nc"
         }], directory="/some/dir")
-        result = patterns.table
         expect = {
             "A": "/some/dir/*.nc"
         }
         self.assertEqual(expect, result)
-
-    def test_state_interface(self):
-        state = main.State()
-        callback = unittest.mock.Mock()
-        state.add_callback("model", callback)
-        state.trigger("model", "A")
-        callback.assert_called_once_with("A")
-
-    def test_callback_chain(self):
-        def a(value):
-            return 5 * value
-
-        def b(value):
-            return 5 * value
-        c = compose(a, b)
-        result = c(5)
-        expect = 125
-        self.assertEqual(expect, result)
-
-
-def compose(*funcs):
-    def composed(value):
-        for func in funcs:
-            value = func(value)
-        return value
-    return composed
 
 
 class TestTimeControls(unittest.TestCase):

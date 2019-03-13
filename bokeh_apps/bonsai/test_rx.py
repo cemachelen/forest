@@ -59,6 +59,16 @@ class TestStream(unittest.TestCase):
         streams[0].emit(3)
         self.assert_has_calls(self.view, [(1, 2), (3, 2)])
 
+    def test_unique(self):
+        stream = rx.Stream()
+        uniqued = rx.unique(stream)
+        uniqued.subscribe(self.view)
+        stream.emit(1)
+        stream.emit(2)
+        stream.emit(2)
+        stream.emit(3)
+        self.assert_has_calls(self.view, [1, 2, 3])
+
     def assert_has_calls(self, view, values):
         calls = [unittest.mock.call(v) for v in values]
         view.assert_has_calls(calls)

@@ -79,3 +79,26 @@ def map(stream, transform):
 
     stream.subscribe(callback)
     return mapped
+
+
+def unique(stream):
+    """Emit unique values from a stream
+
+    .. note:: The returned stream.emit() does not filter duplicates
+              the duplicate check is done on values emitted from the
+              input stream
+    """
+    uniqued = Stream()
+
+    def callback(value):
+        if len(uniqued.history) == 0:
+            uniqued.emit(value)
+            return
+        else:
+            previous = uniqued.history[-1]
+            if value == previous:
+                return
+            uniqued.emit(value)
+
+    stream.subscribe(callback)
+    return uniqued
