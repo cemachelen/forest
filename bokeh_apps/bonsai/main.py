@@ -110,7 +110,7 @@ def main():
     @timed
     def process_files(pattern):
         paths = glob.glob(pattern)
-        dates = [model_run_time(path) for path in paths]
+        dates = [parse_time(path) for path in paths]
         return sorted(dates)
 
     def select(dropdown):
@@ -484,7 +484,7 @@ class FileSystem(object):
     def find_file(paths, date):
         """Search for file matching date"""
         for path in paths:
-            if model_run_time(path) == date:
+            if parse_time(path) == date:
                 return path
 
 
@@ -498,10 +498,18 @@ def file_patterns(models, directory=None):
     return table
 
 
-def model_run_time(path):
+def parse_time(path):
     file_name = os.path.basename(path)
-    timestamp = re.search("[0-9]{8}T[0-9]{4}Z", file_name).group()
-    return dt.datetime.strptime(timestamp, "%Y%m%dT%H%MZ")
+    patterns = [
+        ("[0-9]{8}T[0-9]{4}Z", "%Y%m%dT%H%MZ"),
+        ("[0-9]{8}", "%Y%m%d"),
+    ]
+    for regex, fmt in patterns:
+        matches = re.search(regex, file_name)
+        if matches is None:
+            continue
+        timestamp = matches.group()
+        return dt.datetime.strptime(timestamp, fmt)
 
 
 class AsyncImage(object):

@@ -164,14 +164,20 @@ class TestFileSystem(unittest.TestCase):
     def setUp(self):
         self.file_system = main.FileSystem()
 
-    def test_model_run_time_given_file_name(self):
-        result = main.model_run_time("/some/file/takm4p4_20190305T1200Z.nc")
+    def test_parse_time_given_file_name(self):
+        result = main.parse_time("/some/file/takm4p4_20190305T1200Z.nc")
         expect = dt.datetime(2019, 3, 5, 12)
         self.assertEqual(expect, result)
 
-    def test_model_run_time_given_different_time(self):
-        result = main.model_run_time("/some/file/ga6_20180105T0000Z.nc")
+    def test_parse_time_given_different_time(self):
+        result = main.parse_time("/some/file/ga6_20180105T0000Z.nc")
         expect = dt.datetime(2018, 1, 5)
+        self.assertEqual(expect, result)
+
+    def test_run_time_given_gpm_imerg(self):
+        example = "/data/local/frrn/buckets/stephen-sea-public-london/gpm_imerg/gpm_imerg_NRTlate_V05B_20190312_highway_only.nc"
+        result = main.parse_time(example)
+        expect = dt.datetime(2019, 3, 12)
         self.assertEqual(expect, result)
 
     def test_find_file_by_date(self):
