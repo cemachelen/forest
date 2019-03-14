@@ -106,7 +106,6 @@ def main():
         async_glob=async_glob)
     file_system.on_change("path", state.on_change("path"))
     state.register(file_system, "model")
-    state.register(file_system, "run_date")
 
     @timed
     def process_files(pattern):
@@ -139,6 +138,7 @@ def main():
     dates = rx.Stream()
     calendar = bokeh.models.DatePicker()
     calendar.on_change("value", rx.on_change(dates))
+    dates.subscribe(print)
 
     clicks = rx.Stream()
     radio_group = bokeh.models.RadioGroup(
@@ -151,20 +151,35 @@ def main():
     radio_group.on_change("active", rx.on_change(clicks))
     times = rx.map(clicks, lambda i: dt.time(hour=i*12))
 
-    datetimes = rx.combine_latest(
+    streams = []
+    stream = rx.combine_latest(
         (dates, times),
         lambda d, t: dt.datetime(d.year, d.month, d.day, t.hour))
-    datetimes.subscribe(print)
+    streams.append(stream)
 
-    forecast_tool = ForecastTool()
     model_run = ModelRun()
     all_run_dates.subscribe(model_run.on_run_times)
 
-    model_run.on_change("run_date", state.on_change("run_date"))
-    forecast_tool.on_change("run_date", state.on_change("run_date"))
-    forecast_tool.on_change("run_date", model_run.on_run_date)
+    forecast_tool = ForecastTool()
     forecast_tool.on_change("valid_date", state.on_change("valid_date"))
     forecast_tool.on_change("index", state.on_change("index"))
+
+    stream = rx.Stream()
+    model_run.on_change("run_date", rx.on_change(stream))
+    streams.append(stream)
+
+    stream = rx.Stream()
+    forecast_tool.on_change("run_date", rx.on_change(stream))
+    streams.append(stream)
+
+    run_dates = rx.unique(rx.merge(*streams))
+    run_dates.subscribe(lambda x: print("DEBUG:", x))
+
+    def set_calendar(date):
+        print('set_calendar({})'.format(date))
+        calendar.value = dt.date(date.year, date.month, date.day)
+
+    run_dates.subscribe(set_calendar)
 
     state.register(forecast_tool, "path")
 
@@ -546,7 +561,7 @@ class AsyncImage(object):
             try:
                 self.document.remove_next_tick_callback(self.previous_tick)
             except ValueError:
-                print("Previous callback either already started or not added")
+                pass
         blocking_task = partial(self.load, path, index)
         self.previous_tick = self.document.add_next_tick_callback(
             partial(self.unlocked_task, blocking_task))
