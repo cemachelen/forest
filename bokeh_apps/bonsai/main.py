@@ -134,29 +134,6 @@ def main():
     patterns = rx.map(model_names, lambda v: table[v])
     all_run_dates = rx.map(patterns, process_files)
 
-    # Time controls
-    dates = rx.Stream()
-    calendar = bokeh.models.DatePicker()
-    calendar.on_change("value", rx.on_change(dates))
-    dates.subscribe(print)
-
-    clicks = rx.Stream()
-    radio_group = bokeh.models.RadioGroup(
-        labels=["00:00", "12:00"],
-        inline=True,
-        active=0,
-        css_classes=[
-            "bonsai-mg-lf-10",
-            "bonsai-lh-24"])
-    radio_group.on_change("active", rx.on_change(clicks))
-    times = rx.map(clicks, lambda i: dt.time(hour=i*12))
-
-    streams = []
-    stream = rx.combine_latest(
-        (dates, times),
-        lambda d, t: dt.datetime(d.year, d.month, d.day, t.hour))
-    streams.append(stream)
-
     model_run = ModelRun()
     all_run_dates.subscribe(model_run.on_run_times)
 
@@ -164,6 +141,7 @@ def main():
     forecast_tool.on_change("valid_date", state.on_change("valid_date"))
     forecast_tool.on_change("index", state.on_change("index"))
 
+    streams = []
     stream = rx.Stream()
     model_run.on_change("run_date", rx.on_change(stream))
     streams.append(stream)
@@ -174,12 +152,6 @@ def main():
 
     run_dates = rx.unique(rx.merge(*streams))
     run_dates.subscribe(lambda x: print("DEBUG:", x))
-
-    def set_calendar(date):
-        print('set_calendar({})'.format(date))
-        calendar.value = dt.date(date.year, date.month, date.day)
-
-    run_dates.subscribe(set_calendar)
 
     state.register(forecast_tool, "path")
 
@@ -200,8 +172,6 @@ def main():
     document.add_root(toolbar_box)
     document.add_root(bokeh.layouts.column(
         dropdown,
-        calendar,
-        radio_group,
         model_run.figure,
         model_run.button_row,
         forecast_tool.figure,
@@ -249,7 +219,7 @@ class ModelRun(Observable):
         self.figure = navigation_figure(
             plot_height=90,
             toolbar_location=None)
-        self.figure.title.text = "Run date"
+        self.figure.title.text = "Available dates"
         self.source = bokeh.models.ColumnDataSource({
             "x": [],
             "y": []
@@ -282,7 +252,7 @@ class ModelRun(Observable):
         plus.on_click(self.on_plus)
         minus = bokeh.models.Button(label="-", width=width)
         minus.on_click(self.on_minus)
-        self.button_row = bokeh.layouts.row(plus, minus)
+        self.button_row = bokeh.layouts.row(minus, plus)
         super().__init__()
 
     def on_selection(self, attr, old, new):
@@ -367,7 +337,7 @@ class ForecastTool(Observable):
         plus.on_click(self.on_plus)
         minus = bokeh.models.Button(label="-", width=width)
         minus.on_click(self.on_minus)
-        self.button_row = bokeh.layouts.row(plus, minus)
+        self.button_row = bokeh.layouts.row(minus, plus)
         super().__init__()
 
     def on_selection(self, attr, old, new):
