@@ -199,6 +199,39 @@ class TestFileSystem(unittest.TestCase):
         self.assertEqual(expect, result)
 
 
+class TestFileDates(unittest.TestCase):
+    def setUp(self):
+        self.file_dates = main.FileDates()
+
+    def test_source_data(self):
+        result = self.file_dates.source.data
+        expect = {
+            "x": [],
+            "y": []
+        }
+        self.assertEqual(expect, result)
+
+    def test_selected_indices(self):
+        result = self.file_dates.source.selected.indices
+        expect = []
+        self.assertEqual(expect, result)
+
+    def test_on_dates(self):
+        date = dt.datetime(2019, 1, 1)
+        self.file_dates.on_dates([date])
+        result = self.file_dates.source
+        expect = bokeh.models.ColumnDataSource({"x": [date], "y": [0]})
+        expect.selected.indices = []
+        self.assert_sources_equal(expect, result)
+        np.testing.assert_array_equal(
+            expect.selected.indices, result.selected.indices)
+
+    def assert_sources_equal(self, expect, result):
+        self.assertEqual(set(expect.data.keys()), set(result.data.keys()))
+        for k in expect.data.keys():
+            np.testing.assert_array_equal(expect.data[k], result.data[k])
+
+
 class TestFilePatterns(unittest.TestCase):
     def test_file_patterns(self):
         result = main.file_patterns([{
@@ -241,28 +274,6 @@ class TestForecastTool(unittest.TestCase):
         for k, v in expect.items():
             np.testing.assert_array_equal(v, result[k])
 
-    def test_on_run_times(self):
-        time = dt.datetime(2019, 1, 1)
-        tool = main.ModelRun()
-        tool.on_run_times([time])
-        result = tool.source.data
-        expect = {
-            "x": [time],
-            "y": [0]
-        }
-        for k, v in expect.items():
-            np.testing.assert_array_equal(v, result[k])
-
-    @unittest.skip("implementing rx")
-    def test_on_run_date(self):
-        data = {
-            "start": [],
-            "index": []
-        }
-        result = main.ForecastTool.indices(data, run_date, index)
-        expect = [0]
-        self.assertEqual(expect, result)
-
 
 class TestObservable(unittest.TestCase):
     def test_trigger(self):
@@ -279,3 +290,28 @@ class TestObservable(unittest.TestCase):
         observable.trigger("A", "value")
         observable.trigger("B", "value")
         cb.assert_called_once_with("B", None, "value")
+
+
+class TestTimeIndex(unittest.TestCase):
+    def setUp(self):
+        self.bounds = [
+            [dt.datetime(2019, 1, 1), dt.datetime(2019, 1, 2)],
+            [dt.datetime(2019, 1, 2), dt.datetime(2019, 1, 3)],
+            [dt.datetime(2019, 1, 3), dt.datetime(2019, 1, 4)]
+        ]
+
+    def test_time_index_outside_bounds_returns_none(self):
+        self.check(self.bounds, dt.datetime(2019, 1, 10), None)
+
+    def test_time_index_given_value_on_lower_bound(self):
+        self.check(self.bounds, dt.datetime(2019, 1, 2), 1)
+
+    def test_time_index_given_value_inside_bounds(self):
+        self.check(self.bounds, dt.datetime(2019, 1, 1, 12), 0)
+
+    def test_time_index_given_value_on_upper_bound(self):
+        self.check(self.bounds, dt.datetime(2019, 1, 3), 2)
+
+    def check(self, bounds, time, expect):
+        result = main.time_index(bounds, time)
+        self.assertEqual(expect, result)

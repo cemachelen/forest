@@ -107,11 +107,8 @@ def main():
     file_system.on_change("path", state.on_change("path"))
     state.register(file_system, "model")
 
-    @timed
-    def process_files(pattern):
-        paths = glob.glob(pattern)
-        dates = [parse_time(path) for path in paths]
-        return sorted(dates)
+    def process_files(paths):
+        return sorted([parse_time(path) for path in paths])
 
     def select(dropdown):
         def on_click(value):
@@ -132,48 +129,52 @@ def main():
         config.models,
         config.model_dir)
     patterns = rx.map(model_names, lambda v: table[v])
-    all_run_dates = rx.map(patterns, process_files)
+    paths = rx.map(patterns, glob.glob)
+    all_dates = rx.map(paths, process_files)
 
-    model_run = ModelRun()
-    all_run_dates.subscribe(model_run.on_run_times)
+    file_date_ui = FileDates()
+    all_dates.subscribe(file_date_ui.on_dates)
+
+    file_dates = rx.Stream()
+    file_date_ui.on_change("file_date", rx.on_change(file_dates))
+
+    def find_by_date(paths, date):
+        for path in sorted(paths):
+            if parse_time(path) == date:
+                return path
+
+    path_stream = rx.combine_latest(
+        (paths, file_dates), lambda x, y: find_by_date(x, y))
+    path_stream.subscribe(print)
 
     forecast_tool = ForecastTool()
-    forecast_tool.on_change("valid_date", state.on_change("valid_date"))
-    forecast_tool.on_change("index", state.on_change("index"))
-
-    streams = []
-    stream = rx.Stream()
-    model_run.on_change("run_date", rx.on_change(stream))
-    streams.append(stream)
+    stream = rx.map(path_stream, forecast_tool.update)
 
     stream = rx.Stream()
-    forecast_tool.on_change("run_date", rx.on_change(stream))
-    streams.append(stream)
+    forecast_tool.on_change("selected_forecast", rx.on_change(stream))
 
-    run_dates = rx.unique(rx.merge(*streams))
-    run_dates.subscribe(lambda x: print("DEBUG:", x))
-
-    state.register(forecast_tool, "path")
+    valid_time = rx.map(stream, lambda x: x["left"])
+    plot_stream = rx.combine_latest(
+        (path_stream, valid_time),
+        lambda x, y: (x, y))
+    plot_stream.subscribe(print)
 
     image = AsyncImage(
         document,
         figure,
         messenger,
         executor)
-    state.register(image, "path")
-    state.register(image, "index")
+    plot_stream.subscribe(lambda args: image.update(*args))
 
     title = Title(figure)
-    state.register(title, "model")
-    state.register(title, "run_date")
-    state.register(title, "valid_date")
+    rx.map(model_names, lambda x: {"model": x}).subscribe(title.update)
 
     document.add_root(figure)
     document.add_root(toolbar_box)
     document.add_root(bokeh.layouts.column(
         dropdown,
-        model_run.figure,
-        model_run.button_row,
+        file_date_ui.figure,
+        file_date_ui.button_row,
         forecast_tool.figure,
         forecast_tool.button_row,
         name="controls"))
@@ -214,7 +215,7 @@ class Observable(object):
                 cb(attr, old, new)
 
 
-class ModelRun(Observable):
+class FileDates(Observable):
     def __init__(self):
         self.figure = navigation_figure(
             plot_height=90,
@@ -234,7 +235,7 @@ class ModelRun(Observable):
         hover_tool = bokeh.models.HoverTool(
             toggleable=False,
             tooltips=[
-                ('run start', '@x{%Y-%m-%d %H:%M}')
+                ('date', '@x{%Y-%m-%d %H:%M}')
             ],
             formatters={
                 'x': 'datetime'
@@ -244,7 +245,9 @@ class ModelRun(Observable):
         self.figure.add_tools(hover_tool)
         tap_tool = bokeh.models.TapTool()
         self.figure.add_tools(tap_tool)
-        self.source.selected.on_change("indices", self.on_selection)
+
+        # Hook up source
+        self.source.selected.on_change("indices", self.on_indices)
 
         # Button row
         width = 50
@@ -255,12 +258,12 @@ class ModelRun(Observable):
         self.button_row = bokeh.layouts.row(minus, plus)
         super().__init__()
 
-    def on_selection(self, attr, old, new):
+    def on_indices(self, attr, old, new):
         if len(new) == 0:
             return
         i = new[0]
-        run_date = self.source.data["x"][i]
-        self.trigger("run_date", run_date)
+        selected_date = self.source.data["x"][i]
+        self.trigger("file_date", selected_date)
 
     def on_plus(self):
         if len(self.source.selected.indices) == 0:
@@ -274,31 +277,26 @@ class ModelRun(Observable):
         i = self.source.selected.indices[0] - 1
         self.source.selected.indices = [i]
 
-    def on_run_date(self, attr, old, new):
-        run_times = list(self.source.data["x"])
-        if new in run_times:
-            i = run_times.index(new)
-            self.source.selected.indices = [i]
-
-    def on_run_times(self, run_times):
+    def on_dates(self, dates):
         self.source.data = {
-            "x": run_times,
-            "y": np.zeros(len(run_times))
+            "x": dates,
+            "y": np.zeros(len(dates))
         }
 
 
 class ForecastTool(Observable):
     def __init__(self):
         self.figure = navigation_figure()
-        self.figure.title.text = "Forecast date"
-        self.source = bokeh.models.ColumnDataSource({
+        self.figure.title.text = "Time axis"
+        self.empty_data = {
             "top": [],
             "bottom": [],
             "left": [],
             "right": [],
             "start": [],
             "index": []
-        })
+        }
+        self.source = bokeh.models.ColumnDataSource(self.empty_data)
         renderer = self.figure.quad(
             top="top",
             bottom="bottom",
@@ -344,9 +342,10 @@ class ForecastTool(Observable):
         if len(new) == 0:
             return
         i = new[0]
-        self.trigger("run_date", self.source.data["start"][i])
-        self.trigger("valid_date", self.source.data["left"][i])
-        self.trigger("index", self.source.data["index"][i])
+        state = {}
+        for key, values in self.source.data.items():
+            state[key] = values[i]
+        self.trigger("selected_forecast", state)
 
     def on_plus(self):
         if len(self.source.selected.indices) == 0:
@@ -360,16 +359,13 @@ class ForecastTool(Observable):
         i = self.source.selected.indices[0] - 1
         self.source.selected.indices = [i]
 
-    def on_run_date(self, attr, old, new):
-        pass
-
-    def notify(self, state):
-        path = state["path"]
+    def update(self, path):
         if path is None:
             return
+
         with netCDF4.Dataset(path) as dataset:
-            units = dataset.variables["time_2"].units
-            bounds = dataset.variables["time_2_bnds"][:]
+            bounds, units = time_bounds(dataset)
+
         data = self.data(bounds, units)
         start = data["start"][0]
         if start not in self.starts:
@@ -393,6 +389,15 @@ class ForecastTool(Observable):
             "start": start,
             "index": index
         }
+
+
+def time_bounds(dataset):
+    for name in ["time_2", "time"]:
+        if name not in dataset.variables:
+            continue
+        units = dataset.variables[name].units
+        bounds = dataset.variables[name + "_bnds"][:]
+        return bounds, units
 
 
 class AsyncGlob(object):
@@ -482,6 +487,16 @@ def parse_time(path):
         return dt.datetime.strptime(timestamp, fmt)
 
 
+def time_index(bounds, time):
+    if isinstance(bounds, list):
+        bounds = np.asarray(bounds, dtype=object)
+    lower, upper = bounds[:, 0], bounds[:, 1]
+    pts = (time >= lower) & (time < upper)
+    idx = np.arange(len(lower))[pts]
+    if len(idx) > 0:
+        return idx[0]
+
+
 class AsyncImage(object):
     def __init__(self, document, figure, messenger, executor):
         self.document = document
@@ -528,19 +543,22 @@ class AsyncImage(object):
             return
         path = state["path"]
         index = state["index"]
+        self.update(path, index)
+
+    def update(self, path, valid_time):
         if path is None:
             self.document.add_next_tick_callback(
                 partial(self.render, self.empty_data))
             self.document.add_next_tick_callback(
                 self.messenger.on_file_not_found)
             return
-        print("Image: {} {}".format(path, index))
+        print("Image: {} {}".format(path, valid_time))
         if self.previous_tick is not None:
             try:
                 self.document.remove_next_tick_callback(self.previous_tick)
             except ValueError:
                 pass
-        blocking_task = partial(self.load, path, index)
+        blocking_task = partial(self.load, path, valid_time)
         self.previous_tick = self.document.add_next_tick_callback(
             partial(self.unlocked_task, blocking_task))
 
@@ -552,16 +570,28 @@ class AsyncImage(object):
         self.document.add_next_tick_callback(partial(self.render, data))
         self.document.add_next_tick_callback(self.messenger.on_complete)
 
-    def load(self, path, index):
+    def load(self, path, valid_time):
         with netCDF4.Dataset(path) as dataset:
-            lons = dataset.variables["longitude_0"][:]
-            lats = dataset.variables["latitude_0"][:]
+            bounds, units = time_bounds(dataset)
+            bounds = netCDF4.num2date(bounds, units=units)
+            index = time_index(bounds, valid_time)
+            try:
+                lons = dataset.variables["longitude_0"][:]
+            except KeyError:
+                lons = dataset.variables["longitude"][:]
+            try:
+                lats = dataset.variables["latitude_0"][:]
+            except KeyError:
+                lats = dataset.variables["latitude"][:]
             try:
                 var = dataset.variables["stratiform_rainfall_rate"]
             except KeyError:
                 var = dataset.variables["precipitation_flux"]
             values = var[index]
-            values = convert_units(values, var.units, "kg m-2 hour-1")
+            if var.units == "mm h-1":
+                values = values
+            else:
+                values = convert_units(values, var.units, "kg m-2 hour-1")
             gx, _ = transform(
                 lons,
                 np.zeros(len(lons), dtype="d"),
@@ -667,7 +697,7 @@ class Title(object):
         figure.js_on_change("layout_width", custom_js)
         figure.js_on_change("layout_height", custom_js)
 
-    def notify(self, state):
+    def update(self, state):
         words = []
         if "model" in state:
             words.append(state["model"])
