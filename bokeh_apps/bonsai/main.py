@@ -101,8 +101,9 @@ def main():
         return on_click
 
     menu = [(name, name) for name in config.model_names]
+    menu.insert(3, None)
     dropdown = bokeh.models.Dropdown(
-        label="Select model",
+        label="Select model/observation",
         menu=menu)
     dropdown.on_click(select(dropdown))
 
@@ -148,15 +149,48 @@ def main():
     title = Title(figure)
     rx.map(model_names, lambda x: {"model": x}).subscribe(title.update)
 
-    document.add_root(figure)
-    document.add_root(toolbar_box)
-    document.add_root(bokeh.layouts.column(
+    gpm_figure = bokeh.plotting.figure(
+        plot_width=300,
+        plot_height=100,
+        toolbar_location="below",
+        background_fill_alpha=0.8,
+        border_fill_alpha=0,
+    )
+    gpm_figure.yaxis.visible = False
+    gpm_figure.toolbar.logo = None
+    gpm_figure.title.text = "Observation navigation"
+
+    model_figure = forecast_tool.figure
+    model_figure.title.text = "Forecast navigation"
+
+    button = bokeh.models.Button()
+    controls = bokeh.layouts.column(
+        button,
         dropdown,
         file_date_ui.figure,
         file_date_ui.button_row,
         forecast_tool.figure,
         forecast_tool.button_row,
-        name="controls"))
+        name="controls")
+
+    index = None
+    def on_click():
+        nonlocal index
+        if index is None:
+            index = controls.children.index(model_figure)
+
+        if gpm_figure in controls.children:
+            controls.children.remove(gpm_figure)
+            controls.children.insert(index, model_figure)
+        else:
+            controls.children.remove(model_figure)
+            controls.children.insert(index, gpm_figure)
+
+    button.on_click(on_click)
+
+    document.add_root(figure)
+    document.add_root(toolbar_box)
+    document.add_root(controls)
     document.title = config.title
 
 
@@ -199,7 +233,7 @@ class FileDates(Observable):
         self.figure = navigation_figure(
             plot_height=90,
             toolbar_location=None)
-        self.figure.title.text = "Available dates"
+        self.figure.title.text = "File navigation"
         self.source = bokeh.models.ColumnDataSource({
             "x": [],
             "y": []
