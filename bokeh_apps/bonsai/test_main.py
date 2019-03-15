@@ -95,40 +95,6 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(expect, result)
 
 
-class TestState(unittest.TestCase):
-    def setUp(self):
-        self.state = main.State()
-        self.view = unittest.mock.Mock()
-
-    def test_register_notifies_views(self):
-        self.state.register(self.view)
-        self.state.on("model")("A")
-        self.view.notify.assert_called_once_with({"model": "A"})
-
-    def test_state_merges_streams(self):
-        self.state.register(self.view)
-        self.state.on("model")("A")
-        self.state.on("date")("B")
-        self.state.on("model")("B")
-        calls = [
-            unittest.mock.call({"model": "A"}),
-            unittest.mock.call({"model": "A", "date": "B"}),
-            unittest.mock.call({"model": "B", "date": "B"}),
-        ]
-        self.view.notify.assert_has_calls(calls)
-
-    def test_register_can_listen_to_particular_changes(self):
-        self.state.register(self.view, "model")
-        self.state.on("model")("A")
-        self.state.on("date")("B")
-        self.state.on("model")("B")
-        calls = [
-            unittest.mock.call({"model": "A"}),
-            unittest.mock.call({"model": "B", "date": "B"}),
-        ]
-        self.view.notify.assert_has_calls(calls)
-
-
 class TestImage(unittest.TestCase):
     def test_constructor(self):
         executor = None
@@ -160,10 +126,7 @@ class TestStretchY(unittest.TestCase):
         np.testing.assert_array_almost_equal(expect, result)
 
 
-class TestFileSystem(unittest.TestCase):
-    def setUp(self):
-        self.file_system = main.FileSystem()
-
+class TestParseTime(unittest.TestCase):
     def test_parse_time_given_file_name(self):
         result = main.parse_time("/some/file/takm4p4_20190305T1200Z.nc")
         expect = dt.datetime(2019, 3, 5, 12)
@@ -186,16 +149,8 @@ class TestFileSystem(unittest.TestCase):
             "/some/file_20180101T1200Z.nc",
             "/some/file_20180102T1200Z.nc"]
         date = dt.datetime(2018, 1, 2, 12)
-        result = self.file_system.find_file(paths, date)
+        result = main.find_by_date(paths, date)
         expect = "/some/file_20180102T1200Z.nc"
-        self.assertEqual(expect, result)
-
-    def test_full_pattern(self):
-        file_system = main.FileSystem(models=[
-            {"name": "A", "pattern": "a.nc"},
-            {"name": "B", "pattern": "b.nc"}])
-        result = file_system.full_pattern("A")
-        expect = "a.nc"
         self.assertEqual(expect, result)
 
 
@@ -314,4 +269,28 @@ class TestTimeIndex(unittest.TestCase):
 
     def check(self, bounds, time, expect):
         result = main.time_index(bounds, time)
+        self.assertEqual(expect, result)
+
+
+class TestMostRecent(unittest.TestCase):
+    def test_most_recent(self):
+        times = [
+            dt.datetime(2019, 1, 1),
+            dt.datetime(2019, 1, 2),
+            dt.datetime(2019, 1, 5)
+        ]
+        time = dt.datetime(2019, 1, 4)
+        self.check(times, time, times[1])
+
+    def test_most_recent_given_time_to_left_of_series(self):
+        times = [
+            dt.datetime(2019, 1, 1),
+            dt.datetime(2019, 1, 2),
+            dt.datetime(2019, 1, 5)
+        ]
+        time = dt.datetime(2019, 1, 9)
+        self.check(times, time, times[2])
+
+    def check(self, times, time, expect):
+        result = main.most_recent(times, time)
         self.assertEqual(expect, result)

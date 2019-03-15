@@ -81,9 +81,6 @@ def main():
         dicts.append(Config.load_dict(env.config_file))
     config = Config.merge(*dicts)
 
-    state = State()
-    state.register(Echo())
-
     figure = full_screen_figure(
         lon_range=config.lon_range,
         lat_range=config.lat_range)
@@ -94,18 +91,6 @@ def main():
     document = bokeh.plotting.curdoc()
     messenger = Messenger(figure)
     executor = ThreadPoolExecutor(max_workers=2)
-
-    async_glob = AsyncGlob(
-        document,
-        messenger,
-        executor)
-
-    file_system = FileSystem(
-        models=config.models,
-        model_dir=config.model_dir,
-        async_glob=async_glob)
-    file_system.on_change("path", state.on_change("path"))
-    state.register(file_system, "model")
 
     def process_files(paths):
         return sorted([parse_time(path) for path in paths])
@@ -120,7 +105,6 @@ def main():
         label="Select model",
         menu=menu)
     dropdown.on_click(select(dropdown))
-    dropdown.on_click(state.on("model"))
 
     model_names = rx.Stream()
     dropdown.on_click(model_names.emit)
@@ -137,11 +121,6 @@ def main():
 
     file_dates = rx.Stream()
     file_date_ui.on_change("file_date", rx.on_change(file_dates))
-
-    def find_by_date(paths, date):
-        for path in sorted(paths):
-            if parse_time(path) == date:
-                return path
 
     path_stream = rx.combine_latest(
         (paths, file_dates), lambda x, y: find_by_date(x, y))
@@ -400,67 +379,17 @@ def time_bounds(dataset):
         return bounds, units
 
 
-class AsyncGlob(object):
-    def __init__(self, document, messenger, executor):
-        self.document = document
-        self.messenger = messenger
-        self.executor = executor
-
-    def glob(self, pattern, cb):
-        self.document.add_next_tick_callback(
-            partial(self.task, pattern, cb))
-
-    @gen.coroutine
-    @without_document_lock
-    def task(self, pattern, cb):
-        self.document.add_next_tick_callback(self.messenger.echo("Searching..."))
-        files = yield self.executor.submit(partial(glob.glob, pattern))
-        self.document.add_next_tick_callback(partial(cb, files))
+def find_by_date(paths, date):
+    for path in sorted(paths):
+        if parse_time(path) == date:
+            return path
 
 
-class FileSystem(object):
-    def __init__(self,
-                 models=None,
-                 model_dir=None,
-                 async_glob=None):
-        self.async_glob = async_glob
-        if models is None:
-            models = []
-        self.models = models
-        self.model_dir = model_dir
-        self.callbacks = []
-
-    def on_change(self, attr, callback):
-        self.callbacks.append(callback)
-
-    def notify(self, state):
-        for attr in ["model", "run_date"]:
-            if attr not in state:
-                return
-        model, date = state["model"], state["run_date"]
-        pattern = self.full_pattern(model)
-
-        def glob_callback(paths):
-            path = self.find_file(paths, date)
-            for cb in self.callbacks:
-                cb("path", None, path)
-        self.async_glob.glob(pattern, glob_callback)
-
-    def full_pattern(self, name):
-        for model in self.models:
-            if name == model["name"]:
-                pattern = model["pattern"]
-                if self.model_dir is None:
-                    return pattern
-                else:
-                    return os.path.join(self.model_dir, pattern)
-
-    @staticmethod
-    def find_file(paths, date):
-        """Search for file matching date"""
-        for path in paths:
-            if parse_time(path) == date:
-                return path
+def most_recent(times, time):
+    """Helper to find files likely to contain data"""
+    if isinstance(times, list):
+        times = np.array(times, dtype=object)
+    return np.max(times[times < time])
 
 
 def file_patterns(models, directory=None):
@@ -535,15 +464,6 @@ class AsyncImage(object):
             major_tick_line_color="black",
             bar_line_color="black")
         figure.add_layout(colorbar, 'center')
-
-    def notify(self, state):
-        if "path" not in state:
-            return
-        if "index" not in state:
-            return
-        path = state["path"]
-        index = state["index"]
-        self.update(path, index)
 
     def update(self, path, valid_time):
         if path is None:
@@ -709,48 +629,6 @@ class Title(object):
 
     def render(self, text):
         self.caption.text = text
-
-
-class Echo(object):
-    def notify(self, state):
-        print(state)
-
-
-class State(object):
-    def __init__(self):
-        self.state = {}
-        self.subscribers = []
-        self.special_subscribers = defaultdict(list)
-        self.callbacks = defaultdict(list)
-
-    def on(self, attr):
-        def callback(value):
-            self.trigger(attr, value)
-        return callback
-
-    def on_change(self, state_attr):
-        def callback(attr, old, new):
-            self.trigger(state_attr, new)
-        return callback
-
-    def register(self, subscriber, state_attr=None):
-        if state_attr is None:
-            self.subscribers.append(subscriber)
-        else:
-            self.special_subscribers[state_attr].append(subscriber)
-
-    def add_callback(self, attr, callback):
-        self.callbacks[attr].append(callback)
-
-    def trigger(self, attr, value):
-        self.state = dict(self.state)
-        self.state[attr] = value
-        for s in self.subscribers:
-            s.notify(self.state)
-        for s in self.special_subscribers[attr]:
-            s.notify(self.state)
-        for cb in self.callbacks[attr]:
-            cb(self.state[attr])
 
 
 def full_screen_figure(
