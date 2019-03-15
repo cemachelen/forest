@@ -207,8 +207,20 @@ def main():
 
     path_stream.subscribe(gpm_load_times)
 
+    def on_indices(source):
+        def wrapped(indices):
+            indices = np.asarray(indices, dtype="i")
+            selection = {}
+            for k, v in source.data.items():
+                if isinstance(v, list):
+                    v = np.asarray(v)
+                selection[k] = v[indices]
+            return selection
+        return wrapped
+
     stream = rx.Stream()
     source.selected.on_change("indices", rx.on_change(stream))
+    stream = rx.map(stream, on_indices(source))
     stream.subscribe(print)
 
     model_figure = forecast_tool.figure

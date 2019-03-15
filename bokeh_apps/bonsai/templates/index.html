@@ -24,14 +24,14 @@
 </style>
 {% endblock %}
 {% block contents %}
-<div class="control-panel">
     {% for doc in docs %}
         {% for root in doc.roots %}
             {% if root.name == "controls" %}
+                <div class="control-panel">
                 {{ embed(root) | indent(10) }}
+                </div>
             {% endif %}
         {% endfor %}
     {% endfor %}
-</div>
     {{ super() }}
 {% endblock %}
