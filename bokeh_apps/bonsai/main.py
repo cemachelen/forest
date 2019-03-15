@@ -117,7 +117,9 @@ def main():
     paths = rx.map(patterns, glob.glob)
     all_dates = rx.map(paths, process_files)
 
-    file_date_ui = FileDates()
+    file_figure = time_figure()
+    source = time_source(file_figure)
+    file_date_ui = FileDates(source)
     all_dates.subscribe(file_date_ui.on_dates)
 
     file_dates = rx.Stream()
@@ -150,48 +152,9 @@ def main():
     rx.map(model_names, lambda x: {"model": x}).subscribe(title.update)
 
     # GPM
-    gpm_figure = bokeh.plotting.figure(
-        x_axis_type="datetime",
-        plot_width=300,
-        plot_height=100,
-        toolbar_location="below",
-        background_fill_alpha=0,
-        border_fill_alpha=0,
-        tools="xwheel_zoom,ywheel_zoom,xpan,ypan,reset,tap",
-        active_scroll="xwheel_zoom",
-        active_drag="xpan",
-        active_tap="tap",
-    )
-    gpm_figure.outline_line_alpha = 0
-    gpm_figure.grid.visible = False
-    gpm_figure.yaxis.visible = False
-    gpm_figure.toolbar.logo = None
-    gpm_figure.title.text = "Observation navigation"
-    source = bokeh.models.ColumnDataSource({
-        "x": [],
-        "y": [],
-        "path": []
-    })
-    renderer = gpm_figure.square(
-        x="x", y="y", size=10, source=source,)
-    hover_tool = bokeh.models.HoverTool(
-        toggleable=False,
-        tooltips=[
-            ('date', '@x{%Y-%m-%d %H:%M}')
-        ],
-        formatters={
-            'x': 'datetime'
-        }
-    )
-    glyph = bokeh.models.Square(
-        fill_color="red",
-        line_color="black")
-    renderer.hover_glyph = glyph
-    renderer.selection_glyph = glyph
-    renderer.nonselection_glyph = bokeh.models.Square(
-        fill_color="white",
-        line_color="black")
-    gpm_figure.add_tools(hover_tool)
+    gpm_figure = time_figure()
+    gpm_figure.title.text = "Observation times"
+    source = time_source(gpm_figure)
 
     def gpm_load_times(path):
         if "gpm" not in path:
@@ -200,10 +163,9 @@ def main():
             times = load_times(dataset)
             data = {
                 "x": times,
-                "y": np.ones(len(times)),
-                "path": len(times) * [os.path.basename(path)]
+                "y": np.ones(len(times))
             }
-        source.data = data
+        source.stream(data)
 
     path_stream.subscribe(gpm_load_times)
 
@@ -230,7 +192,7 @@ def main():
     controls = bokeh.layouts.column(
         button,
         dropdown,
-        file_date_ui.figure,
+        file_figure,
         file_date_ui.button_row,
         forecast_tool.figure,
         forecast_tool.button_row,
@@ -255,6 +217,54 @@ def main():
     document.add_root(toolbar_box)
     document.add_root(controls)
     document.title = config.title
+
+
+def time_figure():
+    figure = bokeh.plotting.figure(
+        x_axis_type="datetime",
+        plot_width=300,
+        plot_height=100,
+        toolbar_location="below",
+        background_fill_alpha=0,
+        border_fill_alpha=0,
+        tools="xwheel_zoom,ywheel_zoom,xpan,ypan,reset,tap",
+        active_scroll="xwheel_zoom",
+        active_drag="xpan",
+        active_tap="tap",
+    )
+    figure.outline_line_alpha = 0
+    figure.grid.visible = False
+    figure.yaxis.visible = False
+    figure.toolbar.logo = None
+    return figure
+
+
+def time_source(figure):
+    source = bokeh.models.ColumnDataSource({
+        "x": [],
+        "y": []
+    })
+    renderer = figure.square(
+        x="x", y="y", size=10, source=source)
+    hover_tool = bokeh.models.HoverTool(
+        toggleable=False,
+        tooltips=[
+            ('date', '@x{%Y-%m-%d %H:%M}')
+        ],
+        formatters={
+            'x': 'datetime'
+        }
+    )
+    glyph = bokeh.models.Square(
+        fill_color="red",
+        line_color="black")
+    renderer.hover_glyph = glyph
+    renderer.selection_glyph = glyph
+    renderer.nonselection_glyph = bokeh.models.Square(
+        fill_color="white",
+        line_color="black")
+    figure.add_tools(hover_tool)
+    return source
 
 
 def navigation_figure(plot_height=240, toolbar_location="below"):
@@ -292,37 +302,9 @@ class Observable(object):
 
 
 class FileDates(Observable):
-    def __init__(self):
-        self.figure = navigation_figure(
-            plot_height=90,
-            toolbar_location=None)
-        self.figure.title.text = "File navigation"
-        self.source = bokeh.models.ColumnDataSource({
-            "x": [],
-            "y": []
-        })
-        renderer = self.figure.square(
-            x="x",
-            y="y",
-            source=self.source)
-        renderer.selection_glyph = bokeh.models.Square(
-            fill_color="red",
-            line_color="red")
-        hover_tool = bokeh.models.HoverTool(
-            toggleable=False,
-            tooltips=[
-                ('date', '@x{%Y-%m-%d %H:%M}')
-            ],
-            formatters={
-                'x': 'datetime'
-            },
-            renderers=[renderer]
-        )
-        self.figure.add_tools(hover_tool)
-        tap_tool = bokeh.models.TapTool()
-        self.figure.add_tools(tap_tool)
-
+    def __init__(self, source):
         # Hook up source
+        self.source = source
         self.source.selected.on_change("indices", self.on_indices)
 
         # Button row
