@@ -156,18 +156,20 @@ def main():
     gpm_figure.title.text = "Observation times"
     source = time_source(gpm_figure)
 
-    def gpm_load_times(path):
-        if "gpm" not in path:
-            return
-        with netCDF4.Dataset(path) as dataset:
-            times = load_times(dataset)
-            data = {
-                "x": times,
-                "y": np.ones(len(times))
-            }
-        source.stream(data)
+    def gpm_load_times(source):
+        def callback(path):
+            if "gpm" not in path:
+                return
+            with netCDF4.Dataset(path) as dataset:
+                times = load_times(dataset)
+                data = {
+                    "x": times,
+                    "y": np.ones(len(times))
+                }
+            source.stream(data)
+        return callback
 
-    path_stream.subscribe(gpm_load_times)
+    path_stream.subscribe(gpm_load_times(source))
 
     def on_indices(source):
         def wrapped(indices):
@@ -188,6 +190,64 @@ def main():
     model_figure = forecast_tool.figure
     model_figure.title.text = "Forecast navigation"
 
+    # Model/Real time plot
+    source = bokeh.models.ColumnDataSource({
+        "left": [],
+        "right": [],
+        "bottom": [],
+        "top": []})
+    time_time_figure = bokeh.plotting.figure(
+        x_axis_type="datetime",
+        y_axis_type="datetime",
+        plot_width=300,
+        plot_height=300,
+        toolbar_location="below",
+        tools="wheel_zoom,xpan,ypan,reset,tap",
+        active_scroll="wheel_zoom",
+        active_drag="xpan",
+        active_tap="tap",
+        background_fill_alpha=0,
+        border_fill_alpha=0)
+    time_time_figure.title.text = "Model/real time"
+    renderer = time_time_figure.quad(
+        left="left",
+        right="right",
+        bottom="bottom",
+        top="top",
+        source=source)
+    renderer.hover_glyph = bokeh.models.Quad(
+        fill_color="white",
+        line_color="black")
+    renderer.selection_glyph = bokeh.models.Quad(
+        fill_color="red",
+        line_color="black")
+    hover_tool = bokeh.models.HoverTool(
+        toggleable=False,
+        tooltips=[
+            ('time', '@left{%Y-%m-%d %H:%M}')
+        ],
+        formatters={
+            'left': 'datetime'},
+        renderers=[renderer]
+    )
+    time_time_figure.add_tools(hover_tool)
+
+    def to_bounds(path):
+        if path is None:
+            return
+        with netCDF4.Dataset(path) as dataset:
+            bounds, units = time_bounds(dataset)
+        return netCDF4.num2date(bounds, units=units)
+
+    def populate_graph(source):
+        def callback(bounds):
+            interval = dt.timedelta(hours=12)
+            data = time_time_graph(bounds, interval)
+            source.stream(data)
+        return callback
+
+    rx.map(path_stream, to_bounds).subscribe(populate_graph(source))
+
     button = bokeh.models.Button()
     controls = bokeh.layouts.column(
         button,
@@ -196,6 +256,7 @@ def main():
         file_date_ui.button_row,
         forecast_tool.figure,
         forecast_tool.button_row,
+        time_time_figure,
         name="controls")
 
     index = None
@@ -265,6 +326,17 @@ def time_source(figure):
         line_color="black")
     figure.add_tools(hover_tool)
     return source
+
+
+def time_time_graph(bounds, interval):
+    n = bounds.shape[0]
+    start = bounds[0, 0]
+    return {
+        "top": n * [start + interval],
+        "bottom": n * [start],
+        "left": bounds[:, 0],
+        "right": bounds[:, 1]
+    }
 
 
 def navigation_figure(plot_height=240, toolbar_location="below"):

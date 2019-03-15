@@ -227,6 +227,32 @@ class TestForecastTool(unittest.TestCase):
             ],
             "index": [0, 1, 2]
         }
+        self.assert_data_equal(expect, result)
+
+    def assert_data_equal(self, expect, result):
+        for k, v in expect.items():
+            np.testing.assert_array_equal(v, result[k])
+
+
+class TestTimeTimePlot(unittest.TestCase):
+    def test_time_time_plot(self):
+        y, m, d = 2019, 1, 1
+        start = dt.datetime(y, m, d, 0)
+        bounds = np.array(
+            [[dt.datetime(y, m, d, 0), dt.datetime(y, m, d, 3)],
+             [dt.datetime(y, m, d, 3), dt.datetime(y, m, d, 6)],
+             [dt.datetime(y, m, d, 6), dt.datetime(y, m, d, 9)]], dtype=object)
+        interval = dt.timedelta(hours=12)
+        result = main.time_time_graph(bounds, interval)
+        expect = {
+            "top": 3 * [start + interval],
+            "bottom": 3 * [start],
+            "left": bounds[:, 0],
+            "right": bounds[:, 1]
+        }
+        self.assert_data_equal(expect, result)
+
+    def assert_data_equal(self, expect, result):
         for k, v in expect.items():
             np.testing.assert_array_equal(v, result[k])
 
