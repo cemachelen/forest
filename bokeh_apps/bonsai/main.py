@@ -149,16 +149,67 @@ def main():
     title = Title(figure)
     rx.map(model_names, lambda x: {"model": x}).subscribe(title.update)
 
+    # GPM
     gpm_figure = bokeh.plotting.figure(
+        x_axis_type="datetime",
         plot_width=300,
         plot_height=100,
         toolbar_location="below",
-        background_fill_alpha=0.8,
+        background_fill_alpha=0,
         border_fill_alpha=0,
+        tools="xwheel_zoom,ywheel_zoom,xpan,ypan,reset,tap",
+        active_scroll="xwheel_zoom",
+        active_drag="xpan",
+        active_tap="tap",
     )
+    gpm_figure.outline_line_alpha = 0
+    gpm_figure.grid.visible = False
     gpm_figure.yaxis.visible = False
     gpm_figure.toolbar.logo = None
     gpm_figure.title.text = "Observation navigation"
+    source = bokeh.models.ColumnDataSource({
+        "x": [],
+        "y": [],
+        "path": []
+    })
+    renderer = gpm_figure.square(
+        x="x", y="y", size=10, source=source,)
+    hover_tool = bokeh.models.HoverTool(
+        toggleable=False,
+        tooltips=[
+            ('date', '@x{%Y-%m-%d %H:%M}')
+        ],
+        formatters={
+            'x': 'datetime'
+        }
+    )
+    glyph = bokeh.models.Square(
+        fill_color="red",
+        line_color="black")
+    renderer.hover_glyph = glyph
+    renderer.selection_glyph = glyph
+    renderer.nonselection_glyph = bokeh.models.Square(
+        fill_color="white",
+        line_color="black")
+    gpm_figure.add_tools(hover_tool)
+
+    def gpm_load_times(path):
+        if "gpm" not in path:
+            return
+        with netCDF4.Dataset(path) as dataset:
+            times = load_times(dataset)
+            data = {
+                "x": times,
+                "y": np.ones(len(times)),
+                "path": len(times) * [os.path.basename(path)]
+            }
+        source.data = data
+
+    path_stream.subscribe(gpm_load_times)
+
+    stream = rx.Stream()
+    source.selected.on_change("indices", rx.on_change(stream))
+    stream.subscribe(print)
 
     model_figure = forecast_tool.figure
     model_figure.title.text = "Forecast navigation"
@@ -411,6 +462,15 @@ def time_bounds(dataset):
         units = dataset.variables[name].units
         bounds = dataset.variables[name + "_bnds"][:]
         return bounds, units
+
+
+def load_times(dataset):
+    for name in ["time_2", "time"]:
+        if name not in dataset.variables:
+            continue
+        units = dataset.variables[name].units
+        values = dataset.variables[name][:]
+        return netCDF4.num2date(values, units=units)
 
 
 def find_by_date(paths, date):
