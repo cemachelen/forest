@@ -76,6 +76,32 @@ def parse_env():
         model_dir=model_dir)
 
 
+class LevelSelector(object):
+    def __init__(self):
+        self.slider = bokeh.models.Slider(
+            start=0,
+            end=4,
+            step=1,
+            value=0,
+            height=100,
+            show_value=False,
+            direction="rtl",
+            orientation="vertical")
+        self.slider.on_change("value", self.on_change)
+
+    def on_change(self, attr, old, new):
+        print(attr, old, new)
+
+
+def select(dropdown):
+    def on_click(value):
+        for label, v in dropdown.menu:
+            if v == value:
+                dropdown.label = label
+                break
+    return on_click
+
+
 def main():
     env = parse_env()
     dicts = [dict(model_dir=env.model_dir)]
@@ -97,20 +123,19 @@ def main():
     def process_files(paths):
         return sorted([parse_time(path) for path in paths])
 
-    def select(dropdown):
-        def on_click(value):
-            dropdown.label = value
-        return on_click
-
     menu = [(name, name) for name in config.model_names]
-    menu.insert(3, None)
-    dropdown = bokeh.models.Dropdown(
-        label="Select model/observation",
-        menu=menu)
-    dropdown.on_click(select(dropdown))
+    model_dropdown = bokeh.models.Dropdown(
+        label="Configuration",
+        menu=menu[:3])
+    model_dropdown.on_click(select(model_dropdown))
+
+    obs_dropdown = bokeh.models.Dropdown(
+        label="Instrument/satellite",
+        menu=menu[3:])
+    obs_dropdown.on_click(select(obs_dropdown))
 
     model_names = rx.Stream()
-    dropdown.on_click(model_names.emit)
+    model_dropdown.on_click(model_names.emit)
 
     table = file_patterns(
         config.models,
@@ -119,14 +144,7 @@ def main():
     paths = rx.map(patterns, glob.glob)
     all_dates = rx.map(paths, process_files)
 
-    file_figure = time_figure()
-    file_figure.title.text = "File times"
-    source = time_source(file_figure)
-    file_date_ui = FileDates(source)
-    all_dates.subscribe(file_date_ui.on_dates)
-
     file_dates = rx.Stream()
-    file_date_ui.on_change("file_date", rx.on_change(file_dates))
 
     path_stream = rx.combine_latest(
         (paths, file_dates), lambda x, y: find_by_date(x, y))
@@ -154,6 +172,20 @@ def main():
     title = Title(figure)
     rx.map(model_names, lambda x: {"model": x}).subscribe(title.update)
 
+    # Field drop down
+    field_dropdown = bokeh.models.Dropdown(
+        label="Field",
+        menu=[
+            ("Precipitation", "precipitation"),
+            ("Outgoing longwave radiation (OLR)", "olr"),
+        ])
+    field_dropdown.on_click(select(field_dropdown))
+
+    # Overlay choices
+    overlay_checkboxes = bokeh.models.CheckboxGroup(
+        labels=["MSLP", "Wind vectors"],
+        inline=True)
+
     # GPM
     gpm = GPM(async_image)
     path_stream.subscribe(gpm.load_times)
@@ -161,29 +193,50 @@ def main():
     model_figure = forecast_tool.figure
     model_figure.title.text = "Forecast navigation"
 
-    plus = Plus(forecast_tool.source)
+    level_selector = LevelSelector()
 
+    plus_button = bokeh.models.Button()
+    minus_button = bokeh.models.Button()
+    tabs = bokeh.models.Tabs(tabs=[
+        bokeh.models.Panel(child=bokeh.layouts.column(
+            model_dropdown,
+            field_dropdown,
+            overlay_checkboxes
+        ), title="Model"),
+        bokeh.models.Panel(child=bokeh.layouts.column(
+            obs_dropdown,
+        ), title="Observation")])
     controls = bokeh.layouts.column(
-        dropdown,
-        file_figure,
-        file_date_ui.button_row,
-        forecast_tool.figure,
-        forecast_tool.button_row,
-        plus.button,
+        bokeh.layouts.row(plus_button, minus_button),
+        tabs,
         name="controls")
 
-    model_names.subscribe(change_ui(controls, model_figure, gpm.figure))
+    # controls = bokeh.layouts.column(
+    #     dropdown,
+    #     field_dropdown,
+    #     overlay_checkboxes,
+    #     forecast_tool.figure,
+    #     forecast_tool.button_row,
+    #     plus.button,
+    #     name="controls")
+
+    height_controls = bokeh.layouts.column(
+        level_selector.slider,
+        name="height")
+
+    # model_names.subscribe(change_ui(controls, model_figure, gpm.figure))
 
     document.add_root(figure)
     document.add_root(toolbar_box)
     document.add_root(controls)
+    document.add_root(height_controls)
     document.title = config.title
 
 
 class Plus(object):
     def __init__(self, source):
         self.source = source
-        self.button = bokeh.models.Button(width=50)
+        self.button = bokeh.models.Button(label="+", width=100)
         self.button.on_click(self.on_click)
 
     def on_click(self):

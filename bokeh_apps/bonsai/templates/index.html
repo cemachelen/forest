@@ -14,12 +14,23 @@
         top: 0;
         z-index: 2;
         width: auto;
+        background-color: rgba(245, 245, 245, 0.7);
+        border-radius: 3px;
     }
     .bonsai-mg-lf-10 {
         margin-left: 10px;
     }
     .bonsai-lh-24 {
         line-height: 24px;
+    }
+    .height-panel {
+        position: absolute;
+        right: 0;
+        bottom: 0;
+        margin-bottom: 50px;
+        margin-right: 20px;
+        width: 20px;
+        z-index: 2;
     }
 </style>
 {% endblock %}
@@ -28,6 +39,11 @@
         {% for root in doc.roots %}
             {% if root.name == "controls" %}
                 <div class="control-panel">
+                {{ embed(root) | indent(10) }}
+                </div>
+            {% endif %}
+            {% if root.name == "height" %}
+                <div class="height-panel">
                 {{ embed(root) | indent(10) }}
                 </div>
             {% endif %}
