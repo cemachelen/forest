@@ -20,7 +20,9 @@ from concurrent.futures import ThreadPoolExecutor
 
 import sys
 sys.path.insert(0, os.path.dirname(__file__))
+
 import rx
+import ui
 from util import timed
 
 
@@ -118,6 +120,7 @@ def main():
     all_dates = rx.map(paths, process_files)
 
     file_figure = time_figure()
+    file_figure.title.text = "File times"
     source = time_source(file_figure)
     file_date_ui = FileDates(source)
     all_dates.subscribe(file_date_ui.on_dates)
@@ -141,143 +144,108 @@ def main():
         lambda x, y: (x, y))
     plot_stream.subscribe(print)
 
-    image = AsyncImage(
+    async_image = AsyncImage(
         document,
         figure,
         messenger,
         executor)
-    plot_stream.subscribe(lambda args: image.update(*args))
+    plot_stream.subscribe(lambda args: async_image.update(*args))
 
     title = Title(figure)
     rx.map(model_names, lambda x: {"model": x}).subscribe(title.update)
 
     # GPM
-    gpm_figure = time_figure()
-    gpm_figure.title.text = "Observation times"
-    source = time_source(gpm_figure)
-
-    def gpm_load_times(source):
-        def callback(path):
-            if "gpm" not in path:
-                return
-            with netCDF4.Dataset(path) as dataset:
-                times = load_times(dataset)
-                data = {
-                    "x": times,
-                    "y": np.ones(len(times))
-                }
-            source.stream(data)
-        return callback
-
-    path_stream.subscribe(gpm_load_times(source))
-
-    def on_indices(source):
-        def wrapped(indices):
-            indices = np.asarray(indices, dtype="i")
-            selection = {}
-            for k, v in source.data.items():
-                if isinstance(v, list):
-                    v = np.asarray(v)
-                selection[k] = v[indices]
-            return selection
-        return wrapped
-
-    stream = rx.Stream()
-    source.selected.on_change("indices", rx.on_change(stream))
-    stream = rx.map(stream, on_indices(source))
-    stream.subscribe(print)
+    gpm = GPM(async_image)
+    path_stream.subscribe(gpm.load_times)
 
     model_figure = forecast_tool.figure
     model_figure.title.text = "Forecast navigation"
 
-    # Model/Real time plot
-    source = bokeh.models.ColumnDataSource({
-        "left": [],
-        "right": [],
-        "bottom": [],
-        "top": []})
-    time_time_figure = bokeh.plotting.figure(
-        x_axis_type="datetime",
-        y_axis_type="datetime",
-        plot_width=300,
-        plot_height=300,
-        toolbar_location="below",
-        tools="wheel_zoom,xpan,ypan,reset,tap",
-        active_scroll="wheel_zoom",
-        active_drag="xpan",
-        active_tap="tap",
-        background_fill_alpha=0,
-        border_fill_alpha=0)
-    time_time_figure.title.text = "Model/real time"
-    renderer = time_time_figure.quad(
-        left="left",
-        right="right",
-        bottom="bottom",
-        top="top",
-        source=source)
-    renderer.hover_glyph = bokeh.models.Quad(
-        fill_color="white",
-        line_color="black")
-    renderer.selection_glyph = bokeh.models.Quad(
-        fill_color="red",
-        line_color="black")
-    hover_tool = bokeh.models.HoverTool(
-        toggleable=False,
-        tooltips=[
-            ('time', '@left{%Y-%m-%d %H:%M}')
-        ],
-        formatters={
-            'left': 'datetime'},
-        renderers=[renderer]
-    )
-    time_time_figure.add_tools(hover_tool)
+    plus = Plus(forecast_tool.source)
 
-    def to_bounds(path):
-        if path is None:
-            return
-        with netCDF4.Dataset(path) as dataset:
-            bounds, units = time_bounds(dataset)
-        return netCDF4.num2date(bounds, units=units)
-
-    def populate_graph(source):
-        def callback(bounds):
-            interval = dt.timedelta(hours=12)
-            data = time_time_graph(bounds, interval)
-            source.stream(data)
-        return callback
-
-    rx.map(path_stream, to_bounds).subscribe(populate_graph(source))
-
-    button = bokeh.models.Button()
     controls = bokeh.layouts.column(
-        button,
         dropdown,
         file_figure,
         file_date_ui.button_row,
         forecast_tool.figure,
         forecast_tool.button_row,
-        time_time_figure,
+        plus.button,
         name="controls")
 
-    index = None
-    def on_click():
-        nonlocal index
-        if index is None:
-            index = controls.children.index(model_figure)
-
-        if gpm_figure in controls.children:
-            controls.children.remove(gpm_figure)
-            controls.children.insert(index, model_figure)
-        else:
-            controls.children.remove(model_figure)
-            controls.children.insert(index, gpm_figure)
-
-    button.on_click(on_click)
+    model_names.subscribe(change_ui(controls, model_figure, gpm.figure))
 
     document.add_root(figure)
     document.add_root(toolbar_box)
     document.add_root(controls)
     document.title = config.title
+
+
+class Plus(object):
+    def __init__(self, source):
+        self.source = source
+        self.button = bokeh.models.Button(width=50)
+        self.button.on_click(self.on_click)
+
+    def on_click(self):
+        if len(self.source.selected.indices) == 0:
+            return
+        i = self.source.selected.indices[0]
+        self.source.selected.indices = [i + 1]
+
+
+class GPM(object):
+    def __init__(self, async_image):
+        self.async_image = async_image
+        self.figure = time_figure()
+        self.figure.title.text = "Observation times"
+        self.source = time_source(self.figure)
+        self.source.selected.on_change("indices", self.on_indices)
+        self._paths = {}
+        self._format = "%Y%m%dT%H%M%S"
+
+    def load_times(self, path):
+        if path is None:
+            return
+        if "gpm" not in path:
+            return
+        with netCDF4.Dataset(path) as dataset:
+            times = load_times(dataset)
+            data = {
+                "x": times,
+                "y": np.ones(len(times))
+            }
+        self.source.stream(data)
+
+        # Update catalogue
+        for i, t in enumerate(times):
+            k = t.strftime(self._format)
+            self._paths[k] = (path, i)
+
+    def on_indices(self, attr, old, new):
+        for i in new:
+            time = self.source.data["x"][i]
+            self.load_image(time)
+
+    def load_image(self, time):
+        key = time.strftime(self._format)
+        path, index = self._paths[key]
+        self.async_image.update(path, time)
+
+
+def change_ui(controls, model_figure, gpm_figure):
+    index = controls.children.index(model_figure)
+    def callback(model):
+        if "gpm" in model.lower():
+            if gpm_figure in controls.children:
+                return
+            else:
+                controls.children.remove(model_figure)
+                controls.children.insert(index, gpm_figure)
+        else:
+            if gpm_figure in controls.children:
+                controls.children.remove(gpm_figure)
+                controls.children.insert(index, model_figure)
+    return callback
 
 
 def time_figure():
@@ -326,33 +294,6 @@ def time_source(figure):
         line_color="black")
     figure.add_tools(hover_tool)
     return source
-
-
-def time_time_graph(bounds, interval):
-    n = bounds.shape[0]
-    start = bounds[0, 0]
-    return {
-        "top": n * [start + interval],
-        "bottom": n * [start],
-        "left": bounds[:, 0],
-        "right": bounds[:, 1]
-    }
-
-
-def navigation_figure(plot_height=240, toolbar_location="below"):
-    figure = bokeh.plotting.figure(
-        x_axis_type="datetime",
-        plot_height=plot_height,
-        plot_width=290,
-        tools="xwheel_zoom,ywheel_zoom,xpan,ypan,reset",
-        active_scroll="xwheel_zoom",
-        active_drag="xpan",
-        toolbar_location=toolbar_location)
-    figure.background_fill_alpha = 0.8
-    figure.border_fill_alpha = 0
-    figure.yaxis.visible = False
-    figure.toolbar.logo = None
-    return figure
 
 
 class Observable(object):
@@ -416,7 +357,19 @@ class FileDates(Observable):
 
 class ForecastTool(Observable):
     def __init__(self):
-        self.figure = navigation_figure()
+        self.figure = bokeh.plotting.figure(
+            x_axis_type="datetime",
+            plot_height=240,
+            plot_width=290,
+            tools="xwheel_zoom,ywheel_zoom,pan,reset",
+            active_scroll="xwheel_zoom",
+            active_drag="pan",
+            toolbar_location="below",
+            background_fill_alpha=0,
+            border_fill_alpha=0,
+            outline_line_alpha=0)
+        self.figure.grid.visible = False
+        self.figure.toolbar.logo = None
         self.figure.title.text = "Time axis"
         self.empty_data = {
             "top": [],
@@ -435,10 +388,13 @@ class ForecastTool(Observable):
             source=self.source)
         renderer.hover_glyph = bokeh.models.Quad(
             fill_color="red",
-            line_color="red")
+            line_color="black")
         renderer.selection_glyph = bokeh.models.Quad(
             fill_color="red",
-            line_color="red")
+            line_color="black")
+        renderer.nonselection_glyph = bokeh.models.Quad(
+            fill_color="white",
+            line_color="black")
         hover_tool = bokeh.models.HoverTool(
             toggleable=False,
             tooltips=[
@@ -494,7 +450,7 @@ class ForecastTool(Observable):
             return
 
         with netCDF4.Dataset(path) as dataset:
-            bounds, units = time_bounds(dataset)
+            bounds, units = ui.time_bounds(dataset)
 
         data = self.data(bounds, units)
         start = data["start"][0]
@@ -519,15 +475,6 @@ class ForecastTool(Observable):
             "start": start,
             "index": index
         }
-
-
-def time_bounds(dataset):
-    for name in ["time_2", "time"]:
-        if name not in dataset.variables:
-            continue
-        units = dataset.variables[name].units
-        bounds = dataset.variables[name + "_bnds"][:]
-        return bounds, units
 
 
 def load_times(dataset):
@@ -652,7 +599,7 @@ class AsyncImage(object):
 
     def load(self, path, valid_time):
         with netCDF4.Dataset(path) as dataset:
-            bounds, units = time_bounds(dataset)
+            bounds, units = ui.time_bounds(dataset)
             bounds = netCDF4.num2date(bounds, units=units)
             index = time_index(bounds, valid_time)
             try:

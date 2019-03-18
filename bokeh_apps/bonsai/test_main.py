@@ -8,6 +8,7 @@ import bokeh.plotting
 import main
 import numpy as np
 import netCDF4
+import ui
 
 
 class TestEnvironment(unittest.TestCase):
@@ -243,7 +244,7 @@ class TestTimeTimePlot(unittest.TestCase):
              [dt.datetime(y, m, d, 3), dt.datetime(y, m, d, 6)],
              [dt.datetime(y, m, d, 6), dt.datetime(y, m, d, 9)]], dtype=object)
         interval = dt.timedelta(hours=12)
-        result = main.time_time_graph(bounds, interval)
+        result = ui.RunTimeRealTime.data(bounds, interval)
         expect = {
             "top": 3 * [start + interval],
             "bottom": 3 * [start],
