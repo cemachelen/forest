@@ -23,6 +23,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 import rx
 import ui
+import picker
 from util import timed
 
 
@@ -195,8 +196,22 @@ def main():
 
     level_selector = LevelSelector()
 
-    plus_button = bokeh.models.Button()
-    minus_button = bokeh.models.Button()
+    date_picker = picker.CustomPicker()
+
+    def on_click(date_picker):
+        def callback():
+            date_picker.value = dt.date(2019, 1, 1)
+        return callback
+
+    minus, div, plus = (
+        bokeh.models.Button(label="-", width=135),
+        bokeh.models.Div(text="", width=10),
+        bokeh.models.Button(label="+", width=135))
+    plus.on_click(on_click(date_picker))
+    button_row = bokeh.layouts.row(
+        bokeh.layouts.column(minus),
+        bokeh.layouts.column(div),
+        bokeh.layouts.column(plus))
     tabs = bokeh.models.Tabs(tabs=[
         bokeh.models.Panel(child=bokeh.layouts.column(
             model_dropdown,
@@ -207,7 +222,8 @@ def main():
             obs_dropdown,
         ), title="Observation")])
     controls = bokeh.layouts.column(
-        bokeh.layouts.row(plus_button, minus_button),
+        date_picker,
+        button_row,
         tabs,
         name="controls")
 
