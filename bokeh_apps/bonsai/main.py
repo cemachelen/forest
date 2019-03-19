@@ -23,8 +23,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 import rx
 import ui
-import picker
-import slider
+import bonsai
 from util import timed
 
 
@@ -197,30 +196,25 @@ def main():
 
     level_selector = LevelSelector()
 
-    date_picker = picker.CustomPicker()
+    datetime_picker = bonsai.DatetimePicker()
 
-    def on_click(date_picker, incrementer):
+    def callback(attr, old, new):
+        print(attr, old, new)
+
+    datetime_picker.on_change("value", callback)
+
+    def on_click(datetime_picker, incrementer):
         def callback():
-            if date_picker.value is None:
-                value = dt.date.today()
-            else:
-                value = date_picker.value
-            date_picker.value = incrementer(value)
+            print(datetime_picker.value)
+            datetime_picker.value = incrementer(datetime_picker.value)
         return callback
 
-    hour_slider = slider.HourSlider(
-        start=0,
-        end=24,
-        step=1,
-        value=0,
-        width=280,
-        show_value=False)
     minus, div, plus = (
         bokeh.models.Button(label="-", width=135),
         bokeh.models.Div(text="", width=10),
         bokeh.models.Button(label="+", width=135))
-    plus.on_click(on_click(date_picker, lambda d: d + dt.timedelta(days=1)))
-    minus.on_click(on_click(date_picker, lambda d: d - dt.timedelta(days=1)))
+    plus.on_click(on_click(datetime_picker, lambda d: d + dt.timedelta(days=1)))
+    minus.on_click(on_click(datetime_picker, lambda d: d - dt.timedelta(days=1)))
 
     button_row = bokeh.layouts.row(
         bokeh.layouts.column(minus),
@@ -245,9 +239,9 @@ def main():
             obs_dropdown,
         ), title="Observation")])
     controls = bokeh.layouts.column(
-        date_picker,
+        datetime_picker.date_picker,
         button_row,
-        hour_slider,
+        datetime_picker.hour_slider,
         tabs,
         name="controls")
 
