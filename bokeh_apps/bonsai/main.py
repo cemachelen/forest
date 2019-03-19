@@ -24,6 +24,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 import rx
 import ui
 import picker
+import slider
 from util import timed
 
 
@@ -198,25 +199,47 @@ def main():
 
     date_picker = picker.CustomPicker()
 
-    def on_click(date_picker):
+    def on_click(date_picker, incrementer):
         def callback():
-            date_picker.value = dt.date(2019, 1, 1)
+            if date_picker.value is None:
+                value = dt.date.today()
+            else:
+                value = date_picker.value
+            date_picker.value = incrementer(value)
         return callback
+
+    hour_slider = slider.HourSlider(
+        start=0,
+        end=24,
+        step=1,
+        value=0,
+        width=280,
+        show_value=False)
+    minus, div, plus = (
+        bokeh.models.Button(label="-", width=135),
+        bokeh.models.Div(text="", width=10),
+        bokeh.models.Button(label="+", width=135))
+    plus.on_click(on_click(date_picker, lambda d: d + dt.timedelta(days=1)))
+    minus.on_click(on_click(date_picker, lambda d: d - dt.timedelta(days=1)))
+
+    button_row = bokeh.layouts.row(
+        bokeh.layouts.column(minus),
+        bokeh.layouts.column(div),
+        bokeh.layouts.column(plus))
 
     minus, div, plus = (
         bokeh.models.Button(label="-", width=135),
         bokeh.models.Div(text="", width=10),
         bokeh.models.Button(label="+", width=135))
-    plus.on_click(on_click(date_picker))
-    button_row = bokeh.layouts.row(
-        bokeh.layouts.column(minus),
-        bokeh.layouts.column(div),
-        bokeh.layouts.column(plus))
     tabs = bokeh.models.Tabs(tabs=[
         bokeh.models.Panel(child=bokeh.layouts.column(
+            bokeh.layouts.row(
+                bokeh.layouts.column(minus),
+                bokeh.layouts.column(div),
+                bokeh.layouts.column(plus)),
             model_dropdown,
             field_dropdown,
-            overlay_checkboxes
+            overlay_checkboxes,
         ), title="Model"),
         bokeh.models.Panel(child=bokeh.layouts.column(
             obs_dropdown,
@@ -224,6 +247,7 @@ def main():
     controls = bokeh.layouts.column(
         date_picker,
         button_row,
+        hour_slider,
         tabs,
         name="controls")
 
