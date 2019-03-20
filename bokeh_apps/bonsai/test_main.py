@@ -159,40 +159,6 @@ class TestParseTime(unittest.TestCase):
         self.assertEqual(expect, result)
 
 
-@unittest.skip("refactoring")
-class TestFileDates(unittest.TestCase):
-    def setUp(self):
-        self.file_dates = main.FileDates()
-
-    def test_source_data(self):
-        result = self.file_dates.source.data
-        expect = {
-            "x": [],
-            "y": []
-        }
-        self.assertEqual(expect, result)
-
-    def test_selected_indices(self):
-        result = self.file_dates.source.selected.indices
-        expect = []
-        self.assertEqual(expect, result)
-
-    def test_on_dates(self):
-        date = dt.datetime(2019, 1, 1)
-        self.file_dates.on_dates([date])
-        result = self.file_dates.source
-        expect = bokeh.models.ColumnDataSource({"x": [date], "y": [0]})
-        expect.selected.indices = []
-        self.assert_sources_equal(expect, result)
-        np.testing.assert_array_equal(
-            expect.selected.indices, result.selected.indices)
-
-    def assert_sources_equal(self, expect, result):
-        self.assertEqual(set(expect.data.keys()), set(result.data.keys()))
-        for k in expect.data.keys():
-            np.testing.assert_array_equal(expect.data[k], result.data[k])
-
-
 class TestFilePatterns(unittest.TestCase):
     def test_file_patterns(self):
         result = main.file_patterns([{
@@ -203,40 +169,6 @@ class TestFilePatterns(unittest.TestCase):
             "A": "/some/dir/*.nc"
         }
         self.assertEqual(expect, result)
-
-
-class TestForecastTool(unittest.TestCase):
-    def test_data_from_bounds(self):
-        units = "hours since 1970-01-01 00:00:00"
-        bounds = np.array([[24, 27],
-                           [27, 30],
-                           [30, 33]], dtype=np.float64)
-        result = main.ForecastTool.data(bounds, units)
-        expect = {
-            "top": [3, 6, 9],
-            "bottom": [0, 3, 6],
-            "left": [
-                dt.datetime(1970, 1, 2, 0),
-                dt.datetime(1970, 1, 2, 3),
-                dt.datetime(1970, 1, 2, 6),
-            ],
-            "right": [
-                dt.datetime(1970, 1, 2, 3),
-                dt.datetime(1970, 1, 2, 6),
-                dt.datetime(1970, 1, 2, 9),
-            ],
-            "start": [
-                dt.datetime(1970, 1, 2, 0),
-                dt.datetime(1970, 1, 2, 0),
-                dt.datetime(1970, 1, 2, 0),
-            ],
-            "index": [0, 1, 2]
-        }
-        self.assert_data_equal(expect, result)
-
-    def assert_data_equal(self, expect, result):
-        for k, v in expect.items():
-            np.testing.assert_array_equal(v, result[k])
 
 
 class TestObservable(unittest.TestCase):

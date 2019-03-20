@@ -334,169 +334,6 @@ class Observable(object):
                 cb(attr, old, new)
 
 
-class FileDates(Observable):
-    def __init__(self, source):
-        # Hook up source
-        self.source = source
-        self.source.selected.on_change("indices", self.on_indices)
-
-        # Button row
-        width = 50
-        plus = bokeh.models.Button(label="+", width=width)
-        plus.on_click(self.on_plus)
-        minus = bokeh.models.Button(label="-", width=width)
-        minus.on_click(self.on_minus)
-        self.button_row = bokeh.layouts.row(minus, plus)
-        super().__init__()
-
-    def on_indices(self, attr, old, new):
-        if len(new) == 0:
-            return
-        i = new[0]
-        selected_date = self.source.data["x"][i]
-        self.trigger("file_date", selected_date)
-
-    def on_plus(self):
-        if len(self.source.selected.indices) == 0:
-            return
-        i = self.source.selected.indices[0] + 1
-        self.source.selected.indices = [i]
-
-    def on_minus(self):
-        if len(self.source.selected.indices) == 0:
-            return
-        i = self.source.selected.indices[0] - 1
-        self.source.selected.indices = [i]
-
-    def on_dates(self, dates):
-        self.source.data = {
-            "x": dates,
-            "y": np.zeros(len(dates))
-        }
-
-
-class ForecastTool(Observable):
-    def __init__(self):
-        self.figure = bokeh.plotting.figure(
-            x_axis_type="datetime",
-            plot_height=240,
-            plot_width=290,
-            tools="xwheel_zoom,ywheel_zoom,pan,reset",
-            active_scroll="xwheel_zoom",
-            active_drag="pan",
-            toolbar_location="below",
-            background_fill_alpha=0,
-            border_fill_alpha=0,
-            outline_line_alpha=0)
-        self.figure.grid.visible = False
-        self.figure.toolbar.logo = None
-        self.figure.title.text = "Time axis"
-        self.empty_data = {
-            "top": [],
-            "bottom": [],
-            "left": [],
-            "right": [],
-            "start": [],
-            "index": []
-        }
-        self.source = bokeh.models.ColumnDataSource(self.empty_data)
-        renderer = self.figure.quad(
-            top="top",
-            bottom="bottom",
-            left="left",
-            right="right",
-            source=self.source)
-        renderer.hover_glyph = bokeh.models.Quad(
-            fill_color="red",
-            line_color="black")
-        renderer.selection_glyph = bokeh.models.Quad(
-            fill_color="red",
-            line_color="black")
-        renderer.nonselection_glyph = bokeh.models.Quad(
-            fill_color="white",
-            line_color="black")
-        hover_tool = bokeh.models.HoverTool(
-            toggleable=False,
-            tooltips=[
-                ('time', '@left{%Y-%m-%d %H:%M}'),
-                ('length', 'T@bottom{%+i} to T@top{%+i}'),
-                ('run start', '@start{%Y-%m-%d %H:%M}')
-            ],
-            formatters={
-                'left': 'datetime',
-                'bottom': 'printf',
-                'top': 'printf',
-                'start': 'datetime'},
-            renderers=[renderer]
-        )
-        self.figure.add_tools(hover_tool)
-        tap_tool = bokeh.models.TapTool()
-        self.figure.add_tools(tap_tool)
-        self.starts = set()
-        self.source.selected.on_change("indices", self.on_selection)
-
-        # Button row
-        width = 50
-        plus = bokeh.models.Button(label="+", width=width)
-        plus.on_click(self.on_plus)
-        minus = bokeh.models.Button(label="-", width=width)
-        minus.on_click(self.on_minus)
-        self.button_row = bokeh.layouts.row(minus, plus)
-        super().__init__()
-
-    def on_selection(self, attr, old, new):
-        if len(new) == 0:
-            return
-        i = new[0]
-        state = {}
-        for key, values in self.source.data.items():
-            state[key] = values[i]
-        self.trigger("selected_forecast", state)
-
-    def on_plus(self):
-        if len(self.source.selected.indices) == 0:
-            return
-        i = self.source.selected.indices[0] + 1
-        self.source.selected.indices = [i]
-
-    def on_minus(self):
-        if len(self.source.selected.indices) == 0:
-            return
-        i = self.source.selected.indices[0] - 1
-        self.source.selected.indices = [i]
-
-    def update(self, path):
-        if path is None:
-            return
-
-        with netCDF4.Dataset(path) as dataset:
-            bounds, units = ui.time_bounds(dataset)
-
-        data = self.data(bounds, units)
-        start = data["start"][0]
-        if start not in self.starts:
-            self.source.stream(data)
-            self.starts.add(start)
-
-    @staticmethod
-    def data(bounds, units):
-        """Helper to convert from netCDF4 values to bokeh source"""
-        top = bounds[:, 1] - bounds[0, 0]
-        bottom = bounds[:, 0] - bounds[0, 0]
-        left = netCDF4.num2date(bounds[:, 0], units=units)
-        right = netCDF4.num2date(bounds[:, 1], units=units)
-        start = np.full(len(left), left[0], dtype=object)
-        index = np.arange(bounds.shape[0])
-        return {
-            "top": top,
-            "bottom": bottom,
-            "left": left,
-            "right": right,
-            "start": start,
-            "index": index
-        }
-
-
 def load_times(dataset):
     for name in ["time_2", "time"]:
         if name not in dataset.variables:
@@ -547,16 +384,6 @@ def parse_time(path):
             continue
         timestamp = matches.group()
         return dt.datetime.strptime(timestamp, fmt)
-
-
-def time_index(bounds, time):
-    if isinstance(bounds, list):
-        bounds = np.asarray(bounds, dtype=object)
-    lower, upper = bounds[:, 0], bounds[:, 1]
-    pts = (time >= lower) & (time < upper)
-    idx = np.arange(len(lower))[pts]
-    if len(idx) > 0:
-        return idx[0]
 
 
 class AsyncImage(object):
@@ -673,6 +500,16 @@ class AsyncImage(object):
     @gen.coroutine
     def render(self, data):
         self.source.data = data
+
+
+def time_index(bounds, time):
+    if isinstance(bounds, list):
+        bounds = np.asarray(bounds, dtype=object)
+    lower, upper = bounds[:, 0], bounds[:, 1]
+    pts = (time >= lower) & (time < upper)
+    idx = np.arange(len(lower))[pts]
+    if len(idx) > 0:
+        return idx[0]
 
 
 def convert_units(values, old_unit, new_unit):
