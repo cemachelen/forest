@@ -121,9 +121,6 @@ def main():
     messenger = Messenger(figure)
     executor = ThreadPoolExecutor(max_workers=2)
 
-    def process_files(paths):
-        return sorted([parse_time(path) for path in paths])
-
     menu = [(name, name) for name in config.model_names]
     model_dropdown = bokeh.models.Dropdown(
         label="Configuration",
@@ -135,43 +132,24 @@ def main():
         menu=menu[3:])
     obs_dropdown.on_click(select(obs_dropdown))
 
-    model_names = rx.Stream()
-    model_dropdown.on_click(model_names.emit)
+    models = rx.Stream()
+    model_dropdown.on_click(models.emit)
 
     table = file_patterns(
         config.models,
         config.model_dir)
-    patterns = rx.map(model_names, lambda v: table[v])
-    paths = rx.map(patterns, glob.glob)
-    all_dates = rx.map(paths, process_files)
-
-    file_dates = rx.Stream()
-
-    path_stream = rx.combine_latest(
-        (paths, file_dates), lambda x, y: find_by_date(x, y))
-    path_stream.subscribe(print)
-
-    forecast_tool = ForecastTool()
-    stream = rx.map(path_stream, forecast_tool.update)
-
-    stream = rx.Stream()
-    forecast_tool.on_change("selected_forecast", rx.on_change(stream))
-
-    valid_time = rx.map(stream, lambda x: x["left"])
-    plot_stream = rx.combine_latest(
-        (path_stream, valid_time),
-        lambda x, y: (x, y))
-    plot_stream.subscribe(print)
+    patterns = rx.map(models, lambda v: table[v])
+    patterns.subscribe(print)
 
     async_image = AsyncImage(
         document,
         figure,
         messenger,
         executor)
-    plot_stream.subscribe(lambda args: async_image.update(*args))
+    # plot_stream.subscribe(lambda args: async_image.update(*args))
 
     title = Title(figure)
-    rx.map(model_names, lambda x: {"model": x}).subscribe(title.update)
+    models.subscribe(lambda x: title.update({"model": x}))
 
     # Field drop down
     field_dropdown = bokeh.models.Dropdown(
@@ -189,10 +167,6 @@ def main():
 
     # GPM
     gpm = GPM(async_image)
-    path_stream.subscribe(gpm.load_times)
-
-    model_figure = forecast_tool.figure
-    model_figure.title.text = "Forecast navigation"
 
     level_selector = LevelSelector()
 
@@ -201,11 +175,12 @@ def main():
     def callback(attr, old, new):
         print(attr, old, new)
 
-    datetime_picker.on_change("value", callback)
+    valid_dates = rx.Stream()
+    datetime_picker.on_change("value", rx.on_change(valid_dates))
+    datetime_picker.date_picker.title = "Valid date"
 
     def on_click(datetime_picker, incrementer):
         def callback():
-            print(datetime_picker.value)
             datetime_picker.value = incrementer(datetime_picker.value)
         return callback
 
@@ -238,6 +213,12 @@ def main():
         bokeh.models.Panel(child=bokeh.layouts.column(
             obs_dropdown,
         ), title="Observation")])
+    def on_change(attr, old, new):
+        if new == 0:
+            print("model")
+        else:
+            print("observation")
+    tabs.on_change("active", on_change)
     controls = bokeh.layouts.column(
         datetime_picker.date_picker,
         button_row,
@@ -245,39 +226,15 @@ def main():
         tabs,
         name="controls")
 
-    # controls = bokeh.layouts.column(
-    #     dropdown,
-    #     field_dropdown,
-    #     overlay_checkboxes,
-    #     forecast_tool.figure,
-    #     forecast_tool.button_row,
-    #     plus.button,
-    #     name="controls")
-
     height_controls = bokeh.layouts.column(
         level_selector.slider,
         name="height")
-
-    # model_names.subscribe(change_ui(controls, model_figure, gpm.figure))
 
     document.add_root(figure)
     document.add_root(toolbar_box)
     document.add_root(controls)
     document.add_root(height_controls)
     document.title = config.title
-
-
-class Plus(object):
-    def __init__(self, source):
-        self.source = source
-        self.button = bokeh.models.Button(label="+", width=100)
-        self.button.on_click(self.on_click)
-
-    def on_click(self):
-        if len(self.source.selected.indices) == 0:
-            return
-        i = self.source.selected.indices[0]
-        self.source.selected.indices = [i + 1]
 
 
 class GPM(object):
@@ -317,22 +274,6 @@ class GPM(object):
         key = time.strftime(self._format)
         path, index = self._paths[key]
         self.async_image.update(path, time)
-
-
-def change_ui(controls, model_figure, gpm_figure):
-    index = controls.children.index(model_figure)
-    def callback(model):
-        if "gpm" in model.lower():
-            if gpm_figure in controls.children:
-                return
-            else:
-                controls.children.remove(model_figure)
-                controls.children.insert(index, gpm_figure)
-        else:
-            if gpm_figure in controls.children:
-                controls.children.remove(gpm_figure)
-                controls.children.insert(index, model_figure)
-    return callback
 
 
 def time_figure():
@@ -571,6 +512,12 @@ def load_times(dataset):
         units = dataset.variables[name].units
         values = dataset.variables[name][:]
         return netCDF4.num2date(values, units=units)
+
+
+def find_forecast(paths, run_date):
+    """Find file, index and model date associated with valid date"""
+    run_dates = [parse_time(path) for path in paths]
+    return find_by_date(paths, most_recent(run_dates, run_date))
 
 
 def find_by_date(paths, date):

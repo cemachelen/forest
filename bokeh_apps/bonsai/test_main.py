@@ -278,6 +278,17 @@ class TestTimeIndex(unittest.TestCase):
 
 
 class TestMostRecent(unittest.TestCase):
+    def test_find_forecast(self):
+        paths = [
+            "file_20190101T0000Z.nc",
+            "file_20190101T1200Z.nc",
+            "file_20190102T0000Z.nc"
+        ]
+        run_date = dt.datetime(2019, 1, 1, 2)
+        result = main.find_forecast(paths, run_date)
+        expect = "file_20190101T0000Z.nc"
+        self.assertEqual(expect, result)
+
     def test_most_recent(self):
         times = [
             dt.datetime(2019, 1, 1),
