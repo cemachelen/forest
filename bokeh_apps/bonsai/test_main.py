@@ -13,21 +13,31 @@ import ui
 
 class TestEnvironment(unittest.TestCase):
     def tearDown(self):
-        for variable in ["FOREST_MODEL_DIR"]:
+        for variable in ["FOREST_DIR"]:
             if variable in os.environ:
                 del os.environ[variable]
 
-    def test_parse_env_given_forest_model_dir(self):
-        os.environ["FOREST_MODEL_DIR"] = "/some/dir"
-        result = main.parse_env().model_dir
+    def test_parse_env_given_forest_dir(self):
+        os.environ["FOREST_DIR"] = "/some/dir"
+        result = main.parse_env().directory
         expect = "/some/dir"
         self.assertEqual(expect, result)
 
-    def test_parse_env_default_forest_model_dir(self):
-        result = main.parse_env().model_dir
+    def test_parse_env_default_forest_dir(self):
+        result = main.parse_env().directory
         expect = None
         self.assertEqual(expect, result)
 
+class TestDropdownHelpers(unittest.TestCase):
+    def test_pluck(self):
+        result = main.pluck([{"name": "A"}, {"name": "B"}], "name")
+        expect = ["A", "B"]
+        self.assertEqual(expect, result)
+
+    def test_as_menu(self):
+        result = main.as_menu(["Name"])
+        expect = [("Name", "Name")]
+        self.assertEqual(expect, result)
 
 class TestConfig(unittest.TestCase):
     def setUp(self):
@@ -38,42 +48,12 @@ class TestConfig(unittest.TestCase):
         if os.path.exists(self.path):
             os.remove(self.path)
 
-    def test_merge_configs(self):
-        dict_0 = dict(
-            lat_range=[-5, 5],
-            lon_range=[-180, 180])
-        with open(self.path, "w") as stream:
-            yaml.dump({"lon_range": [-10, 10]}, stream)
-            dict_1 = main.Config.load_dict(self.path)
-        merged = main.Config.merge(dict_0, dict_1)
-        self.assertEqual(merged.lon_range, [-10, 10])
-        self.assertEqual(merged.lat_range, [-5, 5])
-
     def test_load(self):
         with open(self.path, "w") as stream:
             yaml.dump({"lon_range": [-10, 10]}, stream)
         result = self.config.load(self.path).lon_range
         expect = [-10, 10]
         self.assertEqual(expect, result)
-
-    def test_model_names(self):
-        settings = {
-            "models": [
-                {"name": "A"},
-                {"name": "B"}
-            ]
-        }
-        with open(self.path, "w") as stream:
-            yaml.dump(settings, stream)
-        result = main.Config.load(self.path).model_names
-        expect = ["A", "B"]
-        self.assertEqual(expect, result)
-
-    def test_model_dir(self):
-        self.check_kwarg("model_dir", "/some/dir")
-
-    def test_default_model_dir_returns_none(self):
-        self.check_default("model_dir", None)
 
     def test_default_lon_range(self):
         self.check_default("lon_range", [-180, 180])
@@ -86,6 +66,30 @@ class TestConfig(unittest.TestCase):
 
     def test_default_models(self):
         self.check_default("models", [])
+
+    def test_default_observations(self):
+        self.check_default("observations", [])
+
+    def test_load_given_observations(self):
+        data = {
+            "observations": []
+        }
+        self.check_load(data, "observations", [])
+
+    def test_load_given_observation_entry(self):
+        data = {
+            "observations": [
+                {"name": "GPM", "pattern": "*.nc"}
+            ]
+        }
+        expect = [{"name": "GPM", "pattern": "*.nc"}]
+        self.check_load(data, "observations", expect)
+
+    def check_load(self, data, attr, expect):
+        with open(self.path, "w") as stream:
+            yaml.dump(data, stream)
+        result = getattr(main.Config.load(self.path), attr)
+        self.assertEqual(expect, result)
 
     def check_default(self, attr, expect):
         result = getattr(main.Config(), attr)

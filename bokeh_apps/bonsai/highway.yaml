@@ -8,6 +8,7 @@ models:
       pattern: model_data/highway_eakm4p4_*.nc
     - name: Global East Africa
       pattern: model_data/highway_ga6_*.nc
+observations:
     - name: GPM IMERG early
       pattern: gpm_imerg/gpm_imerg_NRTearly_V05B_*_highway_only.nc
     - name: GPM IMERG late

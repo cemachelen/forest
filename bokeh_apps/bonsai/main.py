@@ -33,35 +33,20 @@ class Config(object):
                  lon_range=None,
                  lat_range=None,
                  models=None,
-                 model_dir=None):
+                 observations=None):
         def assign(value, default):
             return default if value is None else value
         self.title = title
         self.lon_range = assign(lon_range, [-180, 180])
         self.lat_range = assign(lat_range, [-80, 80])
         self.models = assign(models, [])
-        self.model_dir = model_dir
-
-    @classmethod
-    def merge(cls, *dicts):
-        settings = {}
-        for d in dicts:
-            settings.update(d)
-        return Config(**settings)
-
-    @property
-    def model_names(self):
-        return [model["name"] for model in self.models]
+        self.observations = assign(observations, [])
 
     @classmethod
     def load(cls, path):
-        return cls(**cls.load_dict(path))
-
-    @staticmethod
-    def load_dict(path):
         with open(path) as stream:
-            kwargs = yaml.load(stream)
-        return kwargs
+            data = yaml.load(stream)
+        return cls(**data)
 
 
 class Environment(object):
@@ -71,10 +56,10 @@ class Environment(object):
 
 def parse_env():
     config_file = os.environ.get("FOREST_CONFIG", None)
-    model_dir = os.environ.get("FOREST_MODEL_DIR", None)
+    directory = os.environ.get("FOREST_DIR", None)
     return Environment(
         config_file=config_file,
-        model_dir=model_dir)
+        directory=directory)
 
 
 class LevelSelector(object):
@@ -105,10 +90,10 @@ def select(dropdown):
 
 def main():
     env = parse_env()
-    dicts = [dict(model_dir=env.model_dir)]
-    if env.config_file is not None:
-        dicts.append(Config.load_dict(env.config_file))
-    config = Config.merge(*dicts)
+    if env.config_file is None:
+        config = Config()
+    else:
+        config = Config.load(env.config_file)
 
     figure = full_screen_figure(
         lon_range=config.lon_range,
@@ -121,15 +106,14 @@ def main():
     messenger = Messenger(figure)
     executor = ThreadPoolExecutor(max_workers=2)
 
-    menu = [(name, name) for name in config.model_names]
     model_dropdown = bokeh.models.Dropdown(
         label="Configuration",
-        menu=menu[:3])
+        menu=as_menu(pluck(config.models, "name")))
     model_dropdown.on_click(select(model_dropdown))
 
     obs_dropdown = bokeh.models.Dropdown(
         label="Instrument/satellite",
-        menu=menu[3:])
+        menu=as_menu(pluck(config.observations, "name")))
     obs_dropdown.on_click(select(obs_dropdown))
 
     models = rx.Stream()
@@ -137,7 +121,7 @@ def main():
 
     table = file_patterns(
         config.models,
-        config.model_dir)
+        env.directory)
     patterns = rx.map(models, lambda v: table[v])
     patterns.subscribe(print)
 
@@ -235,6 +219,14 @@ def main():
     document.add_root(controls)
     document.add_root(height_controls)
     document.title = config.title
+
+
+def pluck(items, key):
+    return [item[key] for item in items]
+
+
+def as_menu(items):
+    return [(item, item) for item in items]
 
 
 class GPM(object):
