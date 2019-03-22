@@ -332,7 +332,7 @@ class Application(object):
 
     def state_change(self):
         state = self.store.state
-        print(state)
+        # print(state)
 
         listing = state.get("listing", False)
         loading = state.get("loading", False)
@@ -357,11 +357,12 @@ class Application(object):
                 if name not in files:
                     self.submit(List(), self.list_files(name, pattern))
 
-        if not loading:
+        if not loading and not listing:
             if self.load_needed(state):
                 name = self.get_active(state)
                 valid_date = state["valid_date"]
-                self.submit(Load(), self.load(name, valid_date))
+                path = self.store.state["files"][name][0]
+                self.submit(Load(), self.load(name, valid_date, path))
 
         self.render(state)
 
@@ -382,9 +383,8 @@ class Application(object):
                 return True
         return False
 
-    def load(self, name, valid_date):
+    def load(self, name, valid_date, path):
         def task():
-            path = "/data/local/frrn/buckets/stephen-sea-public-london/model_data/highway_eakm4p4_20181011T1200Z.nc"
             with netCDF4.Dataset(path) as dataset:
                 data = load_index(dataset, 0)
             return {
@@ -462,8 +462,6 @@ def main():
     application = Application(config, env.directory)
     figure = application.figures["map"]
 
-    document = bokeh.plotting.curdoc()
-
     level_selector = LevelSelector()
 
     datetime_picker = application.datetime_picker
@@ -496,6 +494,7 @@ def main():
         level_selector.slider,
         name="height")
 
+    document = bokeh.plotting.curdoc()
     document.add_root(figure)
     document.add_root(application.toolbar_box)
     document.add_root(controls)
