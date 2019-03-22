@@ -374,65 +374,6 @@ class TestReducer(unittest.TestCase):
         self.assertEqual(expect, result)
 
 
-class TestLoadNeeded(unittest.TestCase):
-    def test_load_needed(self):
-        result = main.Application.load_needed(
-            {})
-        expect = False
-        self.assertEqual(expect, result)
-
-    def test_load_needed_given_valid_date(self):
-        result = main.Application.load_needed(
-            {"valid_date": dt.datetime(2019, 1, 1)})
-        expect = False
-        self.assertEqual(expect, result)
-
-    def test_load_needed_given_different_valid_dates(self):
-        state = {
-            "model": {"name": "Tropical", "active": True},
-            "valid_date": dt.datetime(2019, 1, 1),
-            "loaded": {
-                "valid_date": dt.datetime(2019, 1, 2)
-            }
-        }
-        result = main.Application.load_needed(state)
-        expect = True
-        self.assertEqual(expect, result)
-
-    def test_load_needed_given_same_valid_date(self):
-        state = {
-            "model": {"name": "Tropical", "active": True},
-            "valid_date": dt.datetime(2019, 1, 1),
-            "loaded": {
-                "valid_date": dt.datetime(2019, 1, 1)
-            }
-        }
-        result = main.Application.load_needed(state)
-        expect = False
-        self.assertEqual(expect, result)
-
-    def test_load_needed_given_same_date_but_different_model(self):
-        state = {
-            "observation": {"name": "GPM IMERG early", "active": True},
-            "valid_date": dt.datetime(2019, 1, 1),
-            "loaded": {
-                "name": "GPM IMERG late",
-                "valid_date": dt.datetime(2019, 1, 1)
-            }
-        }
-        result = main.Application.load_needed(state)
-        expect = True
-        self.assertEqual(expect, result)
-
-    def test_load_needed_without_name_returns_false(self):
-        result = main.Application.load_needed({
-            "observation": {"name": "GPM", "active": False},
-            "valid_date": dt.datetime(2019, 1, 1)
-        })
-        expect = False
-        self.assertEqual(expect, result)
-
-
 class TestAction(unittest.TestCase):
     def test_activate_observation(self):
         result = main.Action.activate("observation")

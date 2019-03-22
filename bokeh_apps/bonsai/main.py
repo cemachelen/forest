@@ -358,38 +358,50 @@ class Application(object):
                     self.submit(List(), self.list_files(name, pattern))
 
         if not loading and not listing:
-            if self.load_needed(state):
-                name = self.get_active(state)
-                valid_date = state["valid_date"]
-                path = self.store.state["files"][name][0]
-                self.submit(Load(), self.load(name, valid_date, path))
+            self.load_file(state)
 
         self.render(state)
 
-    @staticmethod
-    def load_needed(state):
+    def load_file(self, state):
         if "valid_date" not in state:
-            return False
-        name = Application.get_active(state)
+            return
+        if "files" not in state:
+            return
+        name = self.get_active(state)
         if name is None:
-            return False
+            return
+        if name not in state["files"]:
+            return
+        paths = state["files"][name]
+        valid_date = state["valid_date"]
+        times = np.array([parse_time(path) for path in paths], dtype=object)
+        try:
+            i = np.argmax(times[times < valid_date])
+        except ValueError:
+            return
+        path = paths[i]
+        index = 0
+        if self.load_needed(path, index, state):
+            print(path, index)
+            self.submit(Load(), self.load(path, index))
+
+    @staticmethod
+    def load_needed(path, index, state):
         if "loaded" not in state:
             return True
-        key = "valid_date"
-        if state[key] != state["loaded"][key]:
+        if path != state["loaded"]["path"]:
             return True
-        if "name" in state["loaded"]:
-            if name != state["loaded"]["name"]:
-                return True
+        if index != state["loaded"]["index"]:
+            return True
         return False
 
-    def load(self, name, valid_date, path):
+    def load(self, path, index):
         def task():
             with netCDF4.Dataset(path) as dataset:
-                data = load_index(dataset, 0)
+                data = load_index(dataset, index)
             return {
-                "name": name,
-                "valid_date": valid_date,
+                "path": path,
+                "index": index,
                 "data": data
             }
         return task
