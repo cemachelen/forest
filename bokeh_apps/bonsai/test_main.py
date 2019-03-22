@@ -213,6 +213,203 @@ class TestTimeIndex(unittest.TestCase):
         self.assertEqual(expect, result)
 
 
+class TestApplication(unittest.TestCase):
+    def setUp(self):
+        self.app = main.Application(main.Config())
+
+    def test_application_given_state(self):
+        state = {}
+        state = main.reducer(state, main.Action.activate("model"))
+        state = main.reducer(state, main.Action.set_model_name("Model"))
+        self.app.render(state)
+        self.assertEqual(self.app.title.text, "Model")
+
+    def test_title_text(self):
+        self.check({}, "")
+
+    def test_title_text_given_valid_date(self):
+        date = dt.datetime(2019, 1, 1)
+        state = main.reducer({}, main.Action.set_valid_date(date))
+        self.check(state, "2019-01-01 00:00")
+
+    def test_title_text_given_observation_name(self):
+        state = {}
+        for action in [
+                main.Action.activate("observation"),
+                main.Action.set_name("observation", "GPM")]:
+            state = main.reducer(state, action)
+        self.check(state, "GPM")
+
+    def check(self, state, expect):
+        result = self.app.title_text(state)
+        self.assertEqual(expect, result)
+
+
+class TestStore(unittest.TestCase):
+    def setUp(self):
+        self.store = main.Store(main.reducer)
+
+    def test_store(self):
+        action = {
+            "type": "SET_TITLE",
+            "text": "Hello, world!"
+        }
+        self.store.dispatch(action)
+        result = self.store.state
+        expect = {"title": "Hello, world!"}
+        self.assertEqual(expect, result)
+
+    def test_set_valid_date(self):
+        action = main.Action.set_valid_date(dt.datetime(2019, 1, 1))
+        self.store.dispatch(action)
+        result = self.store.state
+        expect = {"valid_date": dt.datetime(2019, 1, 1)}
+        self.assertEqual(expect, result)
+
+    def test_set_forecast_action(self):
+        valid_date = dt.datetime(2019, 1, 1)
+        length = dt.timedelta(hours=12)
+        result = main.Action.set_forecast(valid_date, length)
+        expect = {
+            "type": "SET_FORECAST",
+            "valid_date": valid_date,
+            "length": length,
+            "run_date": dt.datetime(2018, 12, 31, 12)
+        }
+        self.assertEqual(expect, result)
+
+    def test_reducer_given_set_forecast(self):
+        valid_date = dt.datetime(2019, 1, 1)
+        length = dt.timedelta(hours=12)
+        action = main.Action.set_forecast(valid_date, length)
+        result = main.reducer({}, action)
+        expect = {
+            "valid_date": valid_date,
+            "length": length,
+            "run_date": dt.datetime(2018, 12, 31, 12)
+        }
+        self.assertEqual(expect, result)
+
+    def test_action_set_model_name(self):
+        result = main.Action.set_model_name("East Africa 4.4km")
+        expect = {
+            "type": "SET_NAME",
+            "category": "model",
+            "text": "East Africa 4.4km"
+        }
+        self.assertEqual(expect, result)
+
+    def test_reducer_set_model_name(self):
+        action = main.Action.set_model_name("Tropical Africa 4.4km")
+        result = main.reducer({}, action)
+        expect = {
+            "model": {
+                "name": "Tropical Africa 4.4km"
+            }
+        }
+        self.assertEqual(expect, result)
+
+    def test_reducer_set_observation(self):
+        action = main.Action.set_observation("GPM IMERG")
+        expect = {
+            "observation": {
+                "name": "GPM IMERG"
+            }
+        }
+        self.check(action, expect)
+
+    def test_reducer_set_field(self):
+        action = main.Action.set_model_field("Precipitation")
+        self.check(action, {"model": {"field": "Precipitation"}})
+
+    def check(self, action, expect):
+        result = main.reducer({}, action)
+        self.assertEqual(expect, result)
+
+    def test_store_subscribe(self):
+        action = main.Action.set_model_name("Model")
+        listener = unittest.mock.Mock()
+        unsubscribe = self.store.subscribe(listener)
+        self.store.dispatch(action)
+        listener.assert_called_once_with()
+
+    def test_store_unsubscribe(self):
+        action = main.Action.set_model_name("Model")
+        listener = unittest.mock.Mock()
+        unsubscribe = self.store.subscribe(listener)
+        self.store.dispatch(action)
+        unsubscribe()
+        self.store.dispatch(action)
+        listener.assert_called_once_with()
+
+
+class TestReducer(unittest.TestCase):
+    def test_reducer_on_pending_glob_request(self):
+        result = main.reducer({}, main.Request.started())
+        expect = {
+            "listing": True
+        }
+        self.assertEqual(expect, result)
+
+    def test_reducer_on_successful_glob_request(self):
+        response = {"key": "Tropical Africa", "files": ["file.nc"]}
+        result = main.reducer({}, main.Request.finished(response))
+        expect = {
+            "listing": False,
+            "files": {
+                "Tropical Africa": ["file.nc"]
+            }
+        }
+        self.assertEqual(expect, result)
+
+
+class TestAction(unittest.TestCase):
+    def test_activate_observation(self):
+        result = main.Action.activate("observation")
+        expect = {
+            "type": "ACTIVATE",
+            "category": "observation"
+        }
+        self.assertEqual(expect, result)
+
+    def test_reducer_given_two_activate_actions(self):
+        state = {}
+        for action in [
+                main.Action.activate("observation"),
+                main.Action.deactivate("observation"),
+                main.Action.activate("model")]:
+            state = main.reducer(state, action)
+        result = state
+        expect = {
+            "model": {"active": True},
+            "observation": {"active": False}
+        }
+        self.assertEqual(expect, result)
+
+    def test_request_started(self):
+        result = main.Request.started()
+        expect = {
+            "type": "REQUEST",
+            "status": "active"}
+        self.assertEqual(expect, result)
+
+    def test_request_finished(self):
+        response = []
+        result = main.Request.finished(response)
+        expect = {
+            "type": "REQUEST",
+            "status": "succeed",
+            "response": response}
+        self.assertEqual(expect, result)
+
+    def test_request_failed(self):
+        result = main.Request.failed()
+        expect = {
+            "type": "REQUEST",
+            "status": "fail"}
+        self.assertEqual(expect, result)
+
+
 class TestMostRecent(unittest.TestCase):
     def test_find_forecast(self):
         paths = [

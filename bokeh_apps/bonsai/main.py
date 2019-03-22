@@ -17,6 +17,7 @@ from tornado import gen
 from functools import partial
 from bokeh.document import without_document_lock
 from concurrent.futures import ThreadPoolExecutor
+from collections import OrderedDict
 
 import sys
 sys.path.insert(0, os.path.dirname(__file__))
@@ -88,6 +89,285 @@ def select(dropdown):
     return on_click
 
 
+class Store(object):
+    def __init__(self, reducer, state=None):
+        self.reducer = reducer
+        if state is None:
+            state = {}
+        self.state = state
+        self._uid = 0
+        self.listeners = OrderedDict()
+
+    def uid(self):
+        self._uid = self._uid + 1
+        return self._uid
+
+    def dispatch(self, action):
+        self.state = self.reducer(self.state, action)
+        for listener in self.listeners.values():
+            listener()
+
+    def subscribe(self, listener):
+        uid = self.uid()
+        self.listeners[uid] = listener
+        return partial(self.unsubscribe, uid)
+
+    def unsubscribe(self, uid):
+        del self.listeners[uid]
+
+
+def reducer(state, action):
+    state = dict(state)
+    if action["type"] == "SET_TITLE":
+        state["title"] = action["text"]
+    elif action["type"] == "SET_VALID_DATE":
+        state["valid_date"] = action["value"]
+    elif action["type"] == "SET_FORECAST":
+        state["valid_date"] = action["valid_date"]
+        state["length"] = action["length"]
+        state["run_date"] = action["run_date"]
+    elif action["type"] == "SET_NAME":
+        category = action["category"]
+        state[category] = state.get(category, {})
+        state[category]["name"] = action["text"]
+    elif action["type"] == "SET_MODEL_FIELD":
+        state["model"] = state.get("model", {})
+        state["model"]["field"] = action["text"]
+    elif action["type"] in ["ACTIVATE", "DEACTIVATE"]:
+        value = action["type"] == "ACTIVATE"
+        if action["category"] in state:
+            state[action["category"]]["active"] = value
+        else:
+            state[action["category"]] = {"active": value}
+    elif action["type"] == "REQUEST":
+        if action["status"] == "succeed":
+            state["listing"] = False
+            response = action["response"]
+            if "files" in state:
+                state["files"][response["key"]] = response["files"]
+            else:
+                state["files"] = {response["key"]: response["files"]}
+        else:
+            state["listing"] = True
+    return state
+
+
+class Action(object):
+    @staticmethod
+    def set_valid_date(date):
+        return {
+            "type": "SET_VALID_DATE",
+            "value": date
+        }
+
+    @staticmethod
+    def set_forecast(valid_date, length):
+        return {
+            "type": "SET_FORECAST",
+            "valid_date": valid_date,
+            "length": length,
+            "run_date": valid_date - length
+        }
+
+    @staticmethod
+    def set_title(text):
+        return {
+            "type": "SET_TITLE",
+            "text": text
+        }
+
+    @staticmethod
+    def set_model_name(text):
+        return Action.set_name("model", text)
+
+    @staticmethod
+    def set_observation(text):
+        return Action.set_name("observation", text)
+
+    @staticmethod
+    def set_name(category, text):
+        return {
+            "type": "SET_NAME",
+            "category": category,
+            "text": text
+        }
+
+    @staticmethod
+    def set_model_field(text):
+        return {
+            "type": "SET_MODEL_FIELD",
+            "text": text
+        }
+
+    @staticmethod
+    def activate(category):
+        return {
+            "type": "ACTIVATE",
+            "category": category
+        }
+
+    @staticmethod
+    def deactivate(category):
+        return {
+            "type": "DEACTIVATE",
+            "category": category
+        }
+
+
+class Request(object):
+    @staticmethod
+    def started():
+        return {
+            "type": "REQUEST",
+            "status": "active"}
+
+    @staticmethod
+    def finished(response):
+        return {
+            "type": "REQUEST",
+            "status": "succeed",
+            "response": response}
+
+    @staticmethod
+    def failed():
+        return {
+            "type": "REQUEST",
+            "status": "fail"}
+
+
+class Application(object):
+    def __init__(self, config):
+        self.store = Store(reducer, {"model": {"active": True}})
+        self.unsubscribe = self.store.subscribe(self.state_change)
+        self.document = bokeh.plotting.curdoc()
+        self.executor = ThreadPoolExecutor(max_workers=2)
+        self.figures = {
+            "map": full_screen_figure(
+                lon_range=config.lon_range,
+                lat_range=config.lat_range)
+        }
+        self.toolbar_box = bokeh.models.ToolbarBox(
+            toolbar=self.figures["map"].toolbar,
+            toolbar_location="below")
+
+        self.title = Title(self.figures["map"])
+        self.dropdowns = {}
+        self.dropdowns["model"] = bokeh.models.Dropdown(
+                label="Configuration",
+                menu=as_menu(pluck(config.models, "name")))
+        self.dropdowns["model"].on_click(select(self.dropdowns["model"]))
+        self.dropdowns["model"].on_click(self.on_click(Action.set_model_name))
+        self.dropdowns["observation"] = bokeh.models.Dropdown(
+                label="Instrument/satellite",
+                menu=as_menu(pluck(config.observations, "name")))
+        self.dropdowns["observation"].on_click(select(self.dropdowns["observation"]))
+        self.dropdowns["observation"].on_click(self.on_click(Action.set_observation))
+        self.dropdowns["field"] = bokeh.models.Dropdown(
+            label="Field",
+            menu=[
+                ("Precipitation", "precipitation"),
+                ("Outgoing longwave radiation (OLR)", "olr"),
+            ])
+        self.dropdowns["field"].on_click(select(self.dropdowns["field"]))
+        self.dropdowns["field"].on_click(self.on_click(Action.set_model_field))
+        self.datetime_picker = bonsai.DatetimePicker()
+        self.datetime_picker.date_picker.title = "Valid date"
+        self.datetime_picker.on_change(
+            "value", self.on_change(Action.set_valid_date))
+
+        overlay_checkboxes = bokeh.models.CheckboxGroup(
+            labels=["MSLP", "Wind vectors"],
+            inline=True)
+        minus, div, plus = (
+            bokeh.models.Button(label="-", width=135),
+            bokeh.models.Div(text="", width=10),
+            bokeh.models.Button(label="+", width=135))
+        self.tabs = bokeh.models.Tabs(tabs=[
+            bokeh.models.Panel(child=bokeh.layouts.column(
+                bokeh.layouts.row(
+                    bokeh.layouts.column(minus),
+                    bokeh.layouts.column(div),
+                    bokeh.layouts.column(plus)),
+                self.dropdowns["model"],
+                self.dropdowns["field"],
+                overlay_checkboxes,
+            ), title="Model"),
+            bokeh.models.Panel(child=bokeh.layouts.column(
+                self.dropdowns["observation"],
+            ), title="Observation")])
+        self.tabs.on_change("active", self.on_tab_change)
+        self.pseudo_request_submitted = False
+
+    def on_tab_change(self, attr, old, new):
+        if new == 0:
+            self.store.dispatch(Action.deactivate("observation"))
+            self.store.dispatch(Action.activate("model"))
+        else:
+            self.store.dispatch(Action.deactivate("model"))
+            self.store.dispatch(Action.activate("observation"))
+
+    def state_change(self):
+        state = self.store.state
+        print(state)
+
+        if "model" in state:
+            listing = state.get("listing", False)
+            active = state["model"].get("active", False)
+            name = state["model"].get("name", "")
+            files = state.get("files", {})
+            if active:
+                pattern = self.patterns[name]
+                if (name not in files) and not listing:
+                    self.submit(self.list_files(name, pattern))
+
+        self.render(state)
+
+    @timed
+    def list_files(self, key, pattern):
+        def task():
+            files = glob.glob(pattern)
+            return {key: files}
+        return task
+
+    def submit(self, blocking_task):
+        self.document.add_next_tick_callback(
+            partial(self.unlocked_task, blocking_task))
+        self.store.dispatch(Request.started())
+
+    @gen.coroutine
+    @without_document_lock
+    def unlocked_task(self, blocking_task):
+        response = yield self.executor.submit(blocking_task)
+        self.document.add_next_tick_callback(partial(self.completed, response))
+
+    @gen.coroutine
+    def completed(self, response):
+        self.store.dispatch(Request.finished(response))
+
+    def on_click(self, action_method):
+        def wrapper(value):
+            self.store.dispatch(action_method(value))
+        return wrapper
+
+    def on_change(self, action_method):
+        def wrapper(attr, old, new):
+            self.store.dispatch(action_method(new))
+        return wrapper
+
+    def render(self, state):
+        self.title.text = self.title_text(state)
+
+    def title_text(self, state):
+        parts = []
+        for category in ["model", "observation"]:
+            if category in state:
+                if state[category].get("active", False):
+                    parts.append(state[category].get("name", ""))
+        if "valid_date" in state:
+            parts.append(state["valid_date"].strftime("%Y-%m-%d %H:%M"))
+        return " ".join(parts)
+
+
 def main():
     env = parse_env()
     if env.config_file is None:
@@ -95,73 +375,25 @@ def main():
     else:
         config = Config.load(env.config_file)
 
-    figure = full_screen_figure(
-        lon_range=config.lon_range,
-        lat_range=config.lat_range)
-    toolbar_box = bokeh.models.ToolbarBox(
-        toolbar=figure.toolbar,
-        toolbar_location="below")
+    application = Application(config)
+    figure = application.figures["map"]
 
     document = bokeh.plotting.curdoc()
     messenger = Messenger(figure)
-    executor = ThreadPoolExecutor(max_workers=2)
 
-    model_dropdown = bokeh.models.Dropdown(
-        label="Configuration",
-        menu=as_menu(pluck(config.models, "name")))
-    model_dropdown.on_click(select(model_dropdown))
-
-    obs_dropdown = bokeh.models.Dropdown(
-        label="Instrument/satellite",
-        menu=as_menu(pluck(config.observations, "name")))
-    obs_dropdown.on_click(select(obs_dropdown))
-
-    models = rx.Stream()
-    model_dropdown.on_click(models.emit)
-
-    table = file_patterns(
-        config.models,
-        env.directory)
-    patterns = rx.map(models, lambda v: table[v])
-    patterns.subscribe(print)
-
-    async_image = AsyncImage(
-        document,
-        figure,
-        messenger,
-        executor)
+    # async_image = AsyncImage(
+    #     document,
+    #     figure,
+    #     messenger,
+    #     executor)
     # plot_stream.subscribe(lambda args: async_image.update(*args))
 
-    title = Title(figure)
-    models.subscribe(lambda x: title.update({"model": x}))
-
-    # Field drop down
-    field_dropdown = bokeh.models.Dropdown(
-        label="Field",
-        menu=[
-            ("Precipitation", "precipitation"),
-            ("Outgoing longwave radiation (OLR)", "olr"),
-        ])
-    field_dropdown.on_click(select(field_dropdown))
-
-    # Overlay choices
-    overlay_checkboxes = bokeh.models.CheckboxGroup(
-        labels=["MSLP", "Wind vectors"],
-        inline=True)
-
     # GPM
-    gpm = GPM(async_image)
+    # gpm = GPM(async_image)
 
     level_selector = LevelSelector()
 
-    datetime_picker = bonsai.DatetimePicker()
-
-    def callback(attr, old, new):
-        print(attr, old, new)
-
-    valid_dates = rx.Stream()
-    datetime_picker.on_change("value", rx.on_change(valid_dates))
-    datetime_picker.date_picker.title = "Valid date"
+    datetime_picker = application.datetime_picker
 
     def on_click(datetime_picker, incrementer):
         def callback():
@@ -180,34 +412,11 @@ def main():
         bokeh.layouts.column(div),
         bokeh.layouts.column(plus))
 
-    minus, div, plus = (
-        bokeh.models.Button(label="-", width=135),
-        bokeh.models.Div(text="", width=10),
-        bokeh.models.Button(label="+", width=135))
-    tabs = bokeh.models.Tabs(tabs=[
-        bokeh.models.Panel(child=bokeh.layouts.column(
-            bokeh.layouts.row(
-                bokeh.layouts.column(minus),
-                bokeh.layouts.column(div),
-                bokeh.layouts.column(plus)),
-            model_dropdown,
-            field_dropdown,
-            overlay_checkboxes,
-        ), title="Model"),
-        bokeh.models.Panel(child=bokeh.layouts.column(
-            obs_dropdown,
-        ), title="Observation")])
-    def on_change(attr, old, new):
-        if new == 0:
-            print("model")
-        else:
-            print("observation")
-    tabs.on_change("active", on_change)
     controls = bokeh.layouts.column(
         datetime_picker.date_picker,
         button_row,
         datetime_picker.hour_slider,
-        tabs,
+        application.tabs,
         name="controls")
 
     height_controls = bokeh.layouts.column(
@@ -215,7 +424,7 @@ def main():
         name="height")
 
     document.add_root(figure)
-    document.add_root(toolbar_box)
+    document.add_root(application.toolbar_box)
     document.add_root(controls)
     document.add_root(height_controls)
     document.title = config.title
@@ -587,18 +796,13 @@ class Title(object):
         figure.js_on_change("layout_width", custom_js)
         figure.js_on_change("layout_height", custom_js)
 
-    def update(self, state):
-        words = []
-        if "model" in state:
-            words.append(state["model"])
-        for date_attr in ["run_date", "valid_date"]:
-            if date_attr in state:
-                words.append("{:%Y-%m-%d %H:%M}".format(state[date_attr]))
-        text = " ".join(words)
-        self.render(text)
+    @property
+    def text(self):
+        return self.caption.text
 
-    def render(self, text):
-        self.caption.text = text
+    @text.setter
+    def text(self, value):
+        self.caption.text = value
 
 
 def full_screen_figure(
