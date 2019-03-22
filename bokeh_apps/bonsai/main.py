@@ -134,21 +134,26 @@ def reducer(state, action):
         state["model"] = state.get("model", {})
         state["model"]["field"] = action["text"]
     elif action["type"] in ["ACTIVATE", "DEACTIVATE"]:
-        value = action["type"] == "ACTIVATE"
-        if action["category"] in state:
-            state[action["category"]]["active"] = value
+        active = action["type"] == "ACTIVATE"
+        category = action["category"]
+        if category in state:
+            state[category]["active"] = active
         else:
-            state[action["category"]] = {"active": value}
+            state[category] = {"active": active}
     elif action["type"] == "REQUEST":
+        flag = action["flag"]
         if action["status"] == "succeed":
-            state["listing"] = False
+            state[flag] = False
             response = action["response"]
-            if "files" in state:
-                state["files"][response["key"]] = response["files"]
+            if flag == "listing":
+                if "files" in state:
+                    state["files"].update(response)
+                else:
+                    state["files"] = dict(response)
             else:
-                state["files"] = {response["key"]: response["files"]}
+                state["loaded"] = response
         else:
-            state["listing"] = True
+            state[flag] = True
     return state
 
 
@@ -181,7 +186,7 @@ class Action(object):
         return Action.set_name("model", text)
 
     @staticmethod
-    def set_observation(text):
+    def set_observation_name(text):
         return Action.set_name("observation", text)
 
     @staticmethod
@@ -215,32 +220,48 @@ class Action(object):
 
 
 class Request(object):
-    @staticmethod
-    def started():
+    def __init__(self, flag):
+        self.flag = flag
+
+    def started(self):
         return {
             "type": "REQUEST",
+            "flag": self.flag,
             "status": "active"}
 
-    @staticmethod
-    def finished(response):
+    def finished(self, response):
         return {
             "type": "REQUEST",
+            "flag": self.flag,
             "status": "succeed",
             "response": response}
 
-    @staticmethod
-    def failed():
+    def failed(self):
         return {
             "type": "REQUEST",
+            "flag": self.flag,
             "status": "fail"}
 
 
+class List(Request):
+    def __init__(self):
+        super().__init__("listing")
+
+
+class Load(Request):
+    def __init__(self):
+        super().__init__("loading")
+
+
 class Application(object):
-    def __init__(self, config):
+    def __init__(self, config, directory=None):
         self.store = Store(reducer, {"model": {"active": True}})
         self.unsubscribe = self.store.subscribe(self.state_change)
         self.document = bokeh.plotting.curdoc()
         self.executor = ThreadPoolExecutor(max_workers=2)
+        self.patterns = file_patterns(
+            config.models + config.observations,
+            directory)
         self.figures = {
             "map": full_screen_figure(
                 lon_range=config.lon_range,
@@ -251,6 +272,8 @@ class Application(object):
             toolbar_location="below")
 
         self.title = Title(self.figures["map"])
+        self.messenger = Messenger(self.figures["map"])
+        self.image = Image(self.figures["map"])
         self.dropdowns = {}
         self.dropdowns["model"] = bokeh.models.Dropdown(
                 label="Configuration",
@@ -261,7 +284,8 @@ class Application(object):
                 label="Instrument/satellite",
                 menu=as_menu(pluck(config.observations, "name")))
         self.dropdowns["observation"].on_click(select(self.dropdowns["observation"]))
-        self.dropdowns["observation"].on_click(self.on_click(Action.set_observation))
+        self.dropdowns["observation"].on_click(
+            self.on_click(Action.set_observation_name))
         self.dropdowns["field"] = bokeh.models.Dropdown(
             label="Field",
             menu=[
@@ -296,7 +320,7 @@ class Application(object):
                 self.dropdowns["observation"],
             ), title="Observation")])
         self.tabs.on_change("active", self.on_tab_change)
-        self.pseudo_request_submitted = False
+        self.loaded_state = {}
 
     def on_tab_change(self, attr, old, new):
         if new == 0:
@@ -310,17 +334,65 @@ class Application(object):
         state = self.store.state
         print(state)
 
-        if "model" in state:
-            listing = state.get("listing", False)
-            active = state["model"].get("active", False)
-            name = state["model"].get("name", "")
-            files = state.get("files", {})
-            if active:
+        listing = state.get("listing", False)
+        loading = state.get("loading", False)
+        if listing:
+            self.messenger.text = "Searching..."
+        elif loading:
+            self.messenger.text = "Loading..."
+        else:
+            self.messenger.text = ""
+
+        if not listing:
+            for category in ["model", "observation"]:
+                if category not in state:
+                    continue
+                if not state[category].get("active", False):
+                    continue
+                if "name" not in state[category]:
+                    continue
+                name = state[category]["name"]
+                files = state.get("files", {})
                 pattern = self.patterns[name]
-                if (name not in files) and not listing:
-                    self.submit(self.list_files(name, pattern))
+                if name not in files:
+                    self.submit(List(), self.list_files(name, pattern))
+
+        if not loading:
+            if self.load_needed(state):
+                name = self.get_active(state)
+                valid_date = state["valid_date"]
+                self.submit(Load(), self.load(name, valid_date))
 
         self.render(state)
+
+    @staticmethod
+    def load_needed(state):
+        if "valid_date" not in state:
+            return False
+        name = Application.get_active(state)
+        if name is None:
+            return False
+        if "loaded" not in state:
+            return True
+        key = "valid_date"
+        if state[key] != state["loaded"][key]:
+            return True
+        if "name" in state["loaded"]:
+            if name != state["loaded"]["name"]:
+                return True
+        return False
+
+    def load(self, name, valid_date):
+        def task():
+            path = "/data/local/frrn/buckets/stephen-sea-public-london/model_data/highway_eakm4p4_20181011T1200Z.nc"
+            with netCDF4.Dataset(path) as dataset:
+                data = load_index(dataset, 0)
+            return {
+                "name": name,
+                "valid_date": valid_date,
+                "data": data
+            }
+        return task
 
     @timed
     def list_files(self, key, pattern):
@@ -329,20 +401,21 @@ class Application(object):
             return {key: files}
         return task
 
-    def submit(self, blocking_task):
+    def submit(self, request, blocking_task):
+        completed = partial(self.completed, request)
         self.document.add_next_tick_callback(
-            partial(self.unlocked_task, blocking_task))
-        self.store.dispatch(Request.started())
+            partial(self.unlocked_task, blocking_task, completed))
+        self.store.dispatch(request.started())
 
     @gen.coroutine
     @without_document_lock
-    def unlocked_task(self, blocking_task):
+    def unlocked_task(self, blocking_task, completed):
         response = yield self.executor.submit(blocking_task)
-        self.document.add_next_tick_callback(partial(self.completed, response))
+        self.document.add_next_tick_callback(partial(completed, response))
 
     @gen.coroutine
-    def completed(self, response):
-        self.store.dispatch(Request.finished(response))
+    def completed(self, request, response):
+        self.store.dispatch(request.finished(response))
 
     def on_click(self, action_method):
         def wrapper(value):
@@ -356,16 +429,27 @@ class Application(object):
 
     def render(self, state):
         self.title.text = self.title_text(state)
+        if "loaded" in state:
+            self.image.source.data = state["loaded"]["data"]
 
     def title_text(self, state):
         parts = []
-        for category in ["model", "observation"]:
-            if category in state:
-                if state[category].get("active", False):
-                    parts.append(state[category].get("name", ""))
+        name = self.get_active(state)
+        if name is not None:
+            parts.append(name)
         if "valid_date" in state:
             parts.append(state["valid_date"].strftime("%Y-%m-%d %H:%M"))
         return " ".join(parts)
+
+    @staticmethod
+    def get_active(state):
+        for category in ["model", "observation"]:
+            if category not in state:
+                continue
+            if "name" not in state[category]:
+                continue
+            if state[category].get("active", False):
+                return state[category]["name"]
 
 
 def main():
@@ -375,21 +459,10 @@ def main():
     else:
         config = Config.load(env.config_file)
 
-    application = Application(config)
+    application = Application(config, env.directory)
     figure = application.figures["map"]
 
     document = bokeh.plotting.curdoc()
-    messenger = Messenger(figure)
-
-    # async_image = AsyncImage(
-    #     document,
-    #     figure,
-    #     messenger,
-    #     executor)
-    # plot_stream.subscribe(lambda args: async_image.update(*args))
-
-    # GPM
-    # gpm = GPM(async_image)
 
     level_selector = LevelSelector()
 
@@ -436,111 +509,6 @@ def pluck(items, key):
 
 def as_menu(items):
     return [(item, item) for item in items]
-
-
-class GPM(object):
-    def __init__(self, async_image):
-        self.async_image = async_image
-        self.figure = time_figure()
-        self.figure.title.text = "Observation times"
-        self.source = time_source(self.figure)
-        self.source.selected.on_change("indices", self.on_indices)
-        self._paths = {}
-        self._format = "%Y%m%dT%H%M%S"
-
-    def load_times(self, path):
-        if path is None:
-            return
-        if "gpm" not in path:
-            return
-        with netCDF4.Dataset(path) as dataset:
-            times = load_times(dataset)
-            data = {
-                "x": times,
-                "y": np.ones(len(times))
-            }
-        self.source.stream(data)
-
-        # Update catalogue
-        for i, t in enumerate(times):
-            k = t.strftime(self._format)
-            self._paths[k] = (path, i)
-
-    def on_indices(self, attr, old, new):
-        for i in new:
-            time = self.source.data["x"][i]
-            self.load_image(time)
-
-    def load_image(self, time):
-        key = time.strftime(self._format)
-        path, index = self._paths[key]
-        self.async_image.update(path, time)
-
-
-def time_figure():
-    figure = bokeh.plotting.figure(
-        x_axis_type="datetime",
-        plot_width=300,
-        plot_height=100,
-        toolbar_location="below",
-        background_fill_alpha=0,
-        border_fill_alpha=0,
-        tools="xwheel_zoom,ywheel_zoom,xpan,ypan,reset,tap",
-        active_scroll="xwheel_zoom",
-        active_drag="xpan",
-        active_tap="tap",
-    )
-    figure.outline_line_alpha = 0
-    figure.grid.visible = False
-    figure.yaxis.visible = False
-    figure.toolbar.logo = None
-    return figure
-
-
-def time_source(figure):
-    source = bokeh.models.ColumnDataSource({
-        "x": [],
-        "y": []
-    })
-    renderer = figure.square(
-        x="x", y="y", size=10, source=source)
-    hover_tool = bokeh.models.HoverTool(
-        toggleable=False,
-        tooltips=[
-            ('date', '@x{%Y-%m-%d %H:%M}')
-        ],
-        formatters={
-            'x': 'datetime'
-        }
-    )
-    glyph = bokeh.models.Square(
-        fill_color="red",
-        line_color="black")
-    renderer.hover_glyph = glyph
-    renderer.selection_glyph = glyph
-    renderer.nonselection_glyph = bokeh.models.Square(
-        fill_color="white",
-        line_color="black")
-    figure.add_tools(hover_tool)
-    return source
-
-
-class Observable(object):
-    def __init__(self):
-        self.callbacks = defaultdict(list)
-
-    def on_change(self, attr, callback):
-        self.callbacks[attr].append(callback)
-
-    def trigger(self, attr, value):
-        for cb in self.callbacks[attr]:
-            cb(attr, None, value)
-
-    def notify(self, new):
-        attr, old = None, None
-        for cbs in self.callbacks.values():
-            for cb in cbs:
-                cb(attr, old, new)
 
 
 def load_times(dataset):
@@ -595,13 +563,9 @@ def parse_time(path):
         return dt.datetime.strptime(timestamp, fmt)
 
 
-class AsyncImage(object):
-    def __init__(self, document, figure, messenger, executor):
-        self.document = document
+class Image(object):
+    def __init__(self, figure):
         self.figure = figure
-        self.messenger = messenger
-        self.executor = executor
-        self.previous_tick = None
         self.empty_data = {
             "x": [],
             "y": [],
@@ -634,81 +598,58 @@ class AsyncImage(object):
             bar_line_color="black")
         figure.add_layout(colorbar, 'center')
 
-    def update(self, path, valid_time):
-        if path is None:
-            self.document.add_next_tick_callback(
-                partial(self.render, self.empty_data))
-            self.document.add_next_tick_callback(
-                self.messenger.on_file_not_found)
-            return
-        print("Image: {} {}".format(path, valid_time))
-        if self.previous_tick is not None:
-            try:
-                self.document.remove_next_tick_callback(self.previous_tick)
-            except ValueError:
-                pass
-        blocking_task = partial(self.load, path, valid_time)
-        self.previous_tick = self.document.add_next_tick_callback(
-            partial(self.unlocked_task, blocking_task))
 
-    @gen.coroutine
-    @without_document_lock
-    def unlocked_task(self, blocking_task):
-        self.document.add_next_tick_callback(self.messenger.on_load)
-        data = yield self.executor.submit(blocking_task)
-        self.document.add_next_tick_callback(partial(self.render, data))
-        self.document.add_next_tick_callback(self.messenger.on_complete)
+def load(path, valid_time):
+    with netCDF4.Dataset(path) as dataset:
+        bounds, units = ui.time_bounds(dataset)
+        bounds = netCDF4.num2date(bounds, units=units)
+        index = time_index(bounds, valid_time)
+        data = load_index(dataset, index)
+    return data
 
-    def load(self, path, valid_time):
-        with netCDF4.Dataset(path) as dataset:
-            bounds, units = ui.time_bounds(dataset)
-            bounds = netCDF4.num2date(bounds, units=units)
-            index = time_index(bounds, valid_time)
-            try:
-                lons = dataset.variables["longitude_0"][:]
-            except KeyError:
-                lons = dataset.variables["longitude"][:]
-            try:
-                lats = dataset.variables["latitude_0"][:]
-            except KeyError:
-                lats = dataset.variables["latitude"][:]
-            try:
-                var = dataset.variables["stratiform_rainfall_rate"]
-            except KeyError:
-                var = dataset.variables["precipitation_flux"]
-            values = var[index]
-            if var.units == "mm h-1":
-                values = values
-            else:
-                values = convert_units(values, var.units, "kg m-2 hour-1")
-            gx, _ = transform(
-                lons,
-                np.zeros(len(lons), dtype="d"),
-                cartopy.crs.PlateCarree(),
-                cartopy.crs.Mercator.GOOGLE)
-            _, gy = transform(
-                np.zeros(len(lats), dtype="d"),
-                lats,
-                cartopy.crs.PlateCarree(),
-                cartopy.crs.Mercator.GOOGLE)
-            values = stretch_y(gy)(values)
-            image = np.ma.masked_array(values, values < 0.1)
-            x = gx.min()
-            y = gy.min()
-            dw = gx.max() - gx.min()
-            dh = gy.max() - gy.min()
-        data = {
-            "x": [x],
-            "y": [y],
-            "dw": [dw],
-            "dh": [dh],
-            "image": [image]
-        }
-        return data
 
-    @gen.coroutine
-    def render(self, data):
-        self.source.data = data
+def load_index(dataset, index):
+    try:
+        lons = dataset.variables["longitude_0"][:]
+    except KeyError:
+        lons = dataset.variables["longitude"][:]
+    try:
+        lats = dataset.variables["latitude_0"][:]
+    except KeyError:
+        lats = dataset.variables["latitude"][:]
+    try:
+        var = dataset.variables["stratiform_rainfall_rate"]
+    except KeyError:
+        var = dataset.variables["precipitation_flux"]
+    values = var[index]
+    if var.units == "mm h-1":
+        values = values
+    else:
+        values = convert_units(values, var.units, "kg m-2 hour-1")
+    gx, _ = transform(
+        lons,
+        np.zeros(len(lons), dtype="d"),
+        cartopy.crs.PlateCarree(),
+        cartopy.crs.Mercator.GOOGLE)
+    _, gy = transform(
+        np.zeros(len(lats), dtype="d"),
+        lats,
+        cartopy.crs.PlateCarree(),
+        cartopy.crs.Mercator.GOOGLE)
+    values = stretch_y(gy)(values)
+    image = np.ma.masked_array(values, values < 0.1)
+    x = gx.min()
+    y = gy.min()
+    dw = gx.max() - gx.min()
+    dh = gy.max() - gy.min()
+    data = {
+        "x": [x],
+        "y": [y],
+        "dw": [dw],
+        "dh": [dh],
+        "image": [image]
+    }
+    return data
 
 
 def time_index(bounds, time):
@@ -748,30 +689,13 @@ class Messenger(object):
         figure.js_on_change("layout_width", custom_js)
         figure.js_on_change("layout_height", custom_js)
 
-    def echo(self, message):
-        @gen.coroutine
-        def method():
-            self.render(message)
-        return method
+    @property
+    def text(self):
+        return self.label.text
 
-    @gen.coroutine
-    def erase(self):
-        self.label.text = ""
-
-    @gen.coroutine
-    def on_load(self):
-        self.render("Loading...")
-
-    @gen.coroutine
-    def on_complete(self):
-        self.render("")
-
-    @gen.coroutine
-    def on_file_not_found(self):
-        self.render("File not available")
-
-    def render(self, text):
-        self.label.text = text
+    @text.setter
+    def text(self, value):
+        self.label.text = value
 
 
 class Title(object):

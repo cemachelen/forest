@@ -100,19 +100,6 @@ class TestConfig(unittest.TestCase):
         self.assertEqual(expect, result)
 
 
-class TestImage(unittest.TestCase):
-    def test_constructor(self):
-        executor = None
-        document = bokeh.plotting.curdoc()
-        figure = bokeh.plotting.figure()
-        messenger = main.Messenger(figure)
-        image = main.AsyncImage(
-            document,
-            figure,
-            messenger,
-            executor)
-
-
 class TestConvertUnits(unittest.TestCase):
     def test_convert_units(self):
         result = main.convert_units([1], "kg m-2 s-1", "kg m-2 hour-1")
@@ -169,23 +156,6 @@ class TestFilePatterns(unittest.TestCase):
             "A": "/some/dir/*.nc"
         }
         self.assertEqual(expect, result)
-
-
-class TestObservable(unittest.TestCase):
-    def test_trigger(self):
-        cb = unittest.mock.Mock()
-        observable = main.Observable()
-        observable.on_change("attr", cb)
-        observable.trigger("attr", "value")
-        cb.assert_called_once_with("attr", None, "value")
-
-    def test_on_change_selectively_calls_callbacks(self):
-        cb = unittest.mock.Mock()
-        observable = main.Observable()
-        observable.on_change("B", cb)
-        observable.trigger("A", "value")
-        observable.trigger("B", "value")
-        cb.assert_called_once_with("B", None, "value")
 
 
 class TestTimeIndex(unittest.TestCase):
@@ -310,7 +280,7 @@ class TestStore(unittest.TestCase):
         self.assertEqual(expect, result)
 
     def test_reducer_set_observation(self):
-        action = main.Action.set_observation("GPM IMERG")
+        action = main.Action.set_observation_name("GPM IMERG")
         expect = {
             "observation": {
                 "name": "GPM IMERG"
@@ -345,21 +315,121 @@ class TestStore(unittest.TestCase):
 
 class TestReducer(unittest.TestCase):
     def test_reducer_on_pending_glob_request(self):
-        result = main.reducer({}, main.Request.started())
+        result = main.reducer({}, main.List().started())
         expect = {
             "listing": True
         }
         self.assertEqual(expect, result)
 
     def test_reducer_on_successful_glob_request(self):
-        response = {"key": "Tropical Africa", "files": ["file.nc"]}
-        result = main.reducer({}, main.Request.finished(response))
+        response = {"Tropical Africa": ["file.nc"]}
+        result = main.reducer({}, main.List().finished(response))
         expect = {
             "listing": False,
             "files": {
                 "Tropical Africa": ["file.nc"]
             }
         }
+        self.assertEqual(expect, result)
+
+    def test_reducer_on_pending_load_request(self):
+        result = main.reducer({}, main.Load().started())
+        expect = {
+            "loading": True
+        }
+        self.assertEqual(expect, result)
+
+    def test_reducer_on_finished_load_request(self):
+        response = {
+            "name": "GPM IMERG",
+            "valid_date": dt.datetime(2019, 1, 1),
+            "data":{
+                "x": []
+            }
+        }
+        result = main.reducer({}, main.Load().finished(response))
+        expect = {
+            "loading": False,
+            "loaded": {
+                "name": "GPM IMERG",
+                "valid_date": dt.datetime(2019, 1, 1),
+                "data": {"x": []}
+            }
+        }
+        self.assertEqual(expect, result)
+
+    def test_reducer_sets_active_name(self):
+        state = {}
+        for action in [
+                main.Action.set_observation_name("GPM IMERG"),
+                main.Action.activate("observation")]:
+            state = main.reducer(state, action)
+        result = state
+        expect = {
+            "observation": {
+                "name": "GPM IMERG",
+                "active": True
+            }
+        }
+        self.assertEqual(expect, result)
+
+
+class TestLoadNeeded(unittest.TestCase):
+    def test_load_needed(self):
+        result = main.Application.load_needed(
+            {})
+        expect = False
+        self.assertEqual(expect, result)
+
+    def test_load_needed_given_valid_date(self):
+        result = main.Application.load_needed(
+            {"valid_date": dt.datetime(2019, 1, 1)})
+        expect = False
+        self.assertEqual(expect, result)
+
+    def test_load_needed_given_different_valid_dates(self):
+        state = {
+            "model": {"name": "Tropical", "active": True},
+            "valid_date": dt.datetime(2019, 1, 1),
+            "loaded": {
+                "valid_date": dt.datetime(2019, 1, 2)
+            }
+        }
+        result = main.Application.load_needed(state)
+        expect = True
+        self.assertEqual(expect, result)
+
+    def test_load_needed_given_same_valid_date(self):
+        state = {
+            "model": {"name": "Tropical", "active": True},
+            "valid_date": dt.datetime(2019, 1, 1),
+            "loaded": {
+                "valid_date": dt.datetime(2019, 1, 1)
+            }
+        }
+        result = main.Application.load_needed(state)
+        expect = False
+        self.assertEqual(expect, result)
+
+    def test_load_needed_given_same_date_but_different_model(self):
+        state = {
+            "observation": {"name": "GPM IMERG early", "active": True},
+            "valid_date": dt.datetime(2019, 1, 1),
+            "loaded": {
+                "name": "GPM IMERG late",
+                "valid_date": dt.datetime(2019, 1, 1)
+            }
+        }
+        result = main.Application.load_needed(state)
+        expect = True
+        self.assertEqual(expect, result)
+
+    def test_load_needed_without_name_returns_false(self):
+        result = main.Application.load_needed({
+            "observation": {"name": "GPM", "active": False},
+            "valid_date": dt.datetime(2019, 1, 1)
+        })
+        expect = False
         self.assertEqual(expect, result)
 
 
@@ -387,25 +457,28 @@ class TestAction(unittest.TestCase):
         self.assertEqual(expect, result)
 
     def test_request_started(self):
-        result = main.Request.started()
+        result = main.Request("flag").started()
         expect = {
             "type": "REQUEST",
+            "flag": "flag",
             "status": "active"}
         self.assertEqual(expect, result)
 
     def test_request_finished(self):
         response = []
-        result = main.Request.finished(response)
+        result = main.Request("flag").finished(response)
         expect = {
             "type": "REQUEST",
+            "flag": "flag",
             "status": "succeed",
             "response": response}
         self.assertEqual(expect, result)
 
     def test_request_failed(self):
-        result = main.Request.failed()
+        result = main.Request("flag").failed()
         expect = {
             "type": "REQUEST",
+            "flag": "flag",
             "status": "fail"}
         self.assertEqual(expect, result)
 
