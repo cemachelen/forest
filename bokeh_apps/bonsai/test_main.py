@@ -227,6 +227,101 @@ class TestApplication(unittest.TestCase):
         self.assertEqual(expect, result)
 
 
+class TestFindFileByValidDate(unittest.TestCase):
+    def setUp(self):
+        self.paths = []
+
+    def tearDown(self):
+        for path in self.paths:
+            if os.path.exists(path):
+                os.remove(path)
+
+    def test_find_file_given_date(self):
+        self.paths = ["file.nc"]
+        start = dt.datetime(2019, 1, 1)
+        bounds = self.make_bounds(start, [[0, 3], [3, 6]])
+        for path in self.paths:
+            with netCDF4.Dataset(path, "w") as dataset:
+                self.set_bounds(dataset, bounds)
+        date = dt.datetime(2019, 1, 1)
+        result = main.find_file(self.paths, date)
+        expect = "file.nc", 0
+        self.assertEqual(expect, result)
+
+    def test_find_file_given_date_in_second_file(self):
+        self.paths = [
+                "file_0.nc",
+                "file_1.nc",
+                "file_2.nc"]
+        starts = [
+                dt.datetime(2019, 1, 1),
+                dt.datetime(2019, 1, 2),
+                dt.datetime(2019, 1, 3)]
+        hours = [[0, 3], [3, 6], [6, 9]]
+        for path, start in zip(self.paths, starts):
+            with netCDF4.Dataset(path, "w") as dataset:
+                bounds = self.make_bounds(start, hours)
+                self.set_bounds(dataset, bounds)
+        date = dt.datetime(2019, 1, 2)
+        result = main.find_file(self.paths, date)
+        expect = "file_1.nc", 0
+        self.assertEqual(expect, result)
+
+    def test_find_file_returns_index(self):
+        self.paths = [
+                "file_0.nc",
+                "file_1.nc",
+                "file_2.nc"]
+        starts = [
+                dt.datetime(2019, 1, 1),
+                dt.datetime(2019, 1, 2),
+                dt.datetime(2019, 1, 3)]
+        hours = [[0, 3], [3, 6], [6, 9]]
+        for path, start in zip(self.paths, starts):
+            with netCDF4.Dataset(path, "w") as dataset:
+                bounds = self.make_bounds(start, hours)
+                self.set_bounds(dataset, bounds)
+        date = dt.datetime(2019, 1, 2, 7)
+        result = main.find_file(self.paths, date)
+        expect = "file_1.nc", 2
+        self.assertEqual(expect, result)
+
+    def test_find_file_only_searches_likely_files(self):
+        paths = [
+                "file_20190101T0000Z.nc",
+                "file_20190102T0000Z.nc",
+                "file_20190103T0000Z.nc"]
+        self.paths = paths
+        start = dt.datetime(2019, 1, 2)
+        hours = [[0, 3], [3, 6], [6, 9]]
+        with netCDF4.Dataset(paths[1], "w") as dataset:
+            bounds = self.make_bounds(start, hours)
+            self.set_bounds(dataset, bounds)
+        date = dt.datetime(2019, 1, 2, 7)
+        result = main.find_file(self.paths, date)
+        expect = "file_20190102T0000Z.nc", 2
+        self.assertEqual(expect, result)
+
+    def make_bounds(self, start, hours):
+        if isinstance(hours, list):
+            hours = np.array(hours, dtype=int)
+        cast = np.vectorize(lambda x: dt.timedelta(hours=int(x)))
+        return start + cast(hours)
+
+    def set_bounds(self, dataset, bounds):
+        if isinstance(bounds, list):
+            bounds = np.array(bounds, dtype=object)
+        units = "hours since 1970-01-01 00:00:00"
+        dataset.createDimension("time_2", bounds.shape[0])
+        dataset.createDimension("bnds", 2)
+        var = dataset.createVariable(
+                "time_2", "d", ("time_2",))
+        var.units = units
+        var = dataset.createVariable(
+                "time_2_bnds", "d", ("time_2", "bnds"))
+        var[:] = netCDF4.date2num(bounds, units)
+
+
 class TestStore(unittest.TestCase):
     def setUp(self):
         self.store = main.Store(main.reducer)
@@ -453,17 +548,6 @@ class TestAction(unittest.TestCase):
 
 
 class TestMostRecent(unittest.TestCase):
-    def test_find_forecast(self):
-        paths = [
-            "file_20190101T0000Z.nc",
-            "file_20190101T1200Z.nc",
-            "file_20190102T0000Z.nc"
-        ]
-        run_date = dt.datetime(2019, 1, 1, 2)
-        result = main.find_forecast(paths, run_date)
-        expect = "file_20190101T0000Z.nc"
-        self.assertEqual(expect, result)
-
     def test_most_recent(self):
         times = [
             dt.datetime(2019, 1, 1),

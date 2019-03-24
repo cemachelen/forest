@@ -373,19 +373,13 @@ class Application(object):
                     self.submit(List(), self.list_files(name, pattern))
 
         if not loading and not listing:
-            self.load_file(state)
+            if "valid_date" in state:
+                if "files" in state:
+                    self.load_file(state)
 
         self.render(state)
 
     def load_file(self, state):
-        if state.get("found", False):
-            self.store.dispatch(FILE_NOT_FOUND)
-        return
-
-        if "valid_date" not in state:
-            return
-        if "files" not in state:
-            return
         name = self.get_active(state)
         if name is None:
             return
@@ -393,16 +387,20 @@ class Application(object):
             return
         paths = state["files"][name]
         valid_date = state["valid_date"]
-        times = np.array([parse_time(path) for path in paths], dtype=object)
-        try:
-            i = np.argmax(times[times < valid_date])
-        except ValueError:
-            return
-        path = paths[i]
-        index = 0
-        if self.load_needed(path, index, state):
-            print(path, index)
-            self.submit(Load(), self.load(path, index))
+
+        print("exhaustively searching all files")
+        print(find_file(paths, valid_date))
+
+        # times = np.array([parse_time(path) for path in paths], dtype=object)
+        # try:
+        #     i = np.argmax(times[times < valid_date])
+        # except ValueError:
+        #     return
+        # path = paths[i]
+        # index = 0
+        # if self.load_needed(path, index, state):
+        #     print(path, index)
+        #     self.submit(Load(), self.load(path, index))
 
     @staticmethod
     def load_needed(path, index, state):
@@ -550,10 +548,46 @@ def load_times(dataset):
         return netCDF4.num2date(values, units=units)
 
 
-def find_forecast(paths, run_date):
-    """Find file, index and model date associated with valid date"""
-    run_dates = [parse_time(path) for path in paths]
-    return find_by_date(paths, most_recent(run_dates, run_date))
+def hours_before(date):
+    def wrapped(path):
+        d = parse_time(path)
+        v = (date - d).total_seconds() / (60 * 60)
+        print(v)
+        return v
+    return wrapped
+
+
+@timed
+def find_file(paths, date):
+    none_files = [
+            path for path in paths
+            if parse_time(path) is None]
+    stamp_files = [
+            path for path in paths
+            if parse_time(path) is not None]
+    after_files = [
+            path for path in stamp_files
+            if parse_time(path) > date]
+    before_files = [
+            path for path in stamp_files
+            if parse_time(path) <= date]
+    before_files = sorted(before_files,
+            key=hours_before(date))
+    search_paths = \
+            before_files + \
+            none_files
+
+    for path in search_paths:
+        with netCDF4.Dataset(path) as dataset:
+            values = dataset.variables["time_2_bnds"][:]
+            units = dataset.variables["time_2"].units
+        bounds = netCDF4.num2date(values, units=units)
+        start, end = np.min(bounds), np.max(bounds)
+        if start <= date <= end:
+            index = np.where(
+                    (bounds[:, 0] <= date) &
+                    (date < bounds[:, 1]))
+            return path, index[0]
 
 
 def find_by_date(paths, date):
