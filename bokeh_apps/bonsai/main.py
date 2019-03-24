@@ -154,6 +154,8 @@ def reducer(state, action):
                 state["loaded"] = response
         else:
             state[flag] = True
+    elif action["type"] == "FILE_FOUND":
+        state["found"] = action["status"]
     return state
 
 
@@ -253,6 +255,16 @@ class Load(Request):
         super().__init__("loading")
 
 
+def file_found(status):
+    return {
+        "type": "FILE_FOUND",
+        "status": status
+    }
+
+FILE_FOUND = file_found(True)
+FILE_NOT_FOUND = file_found(False)
+
+
 class Application(object):
     def __init__(self, config, directory=None):
         self.store = Store(reducer, {"model": {"active": True}})
@@ -334,12 +346,15 @@ class Application(object):
         state = self.store.state
         # print(state)
 
+        found = state.get("found", False)
         listing = state.get("listing", False)
         loading = state.get("loading", False)
         if listing:
             self.messenger.text = "Searching..."
         elif loading:
             self.messenger.text = "Loading..."
+        elif not found:
+            self.messenger.text = "File not found"
         else:
             self.messenger.text = ""
 
@@ -363,6 +378,10 @@ class Application(object):
         self.render(state)
 
     def load_file(self, state):
+        if state.get("found", False):
+            self.store.dispatch(FILE_NOT_FOUND)
+        return
+
         if "valid_date" not in state:
             return
         if "files" not in state:

@@ -210,6 +210,18 @@ class TestApplication(unittest.TestCase):
             state = main.reducer(state, action)
         self.check(state, "GPM")
 
+    def test_file_not_found_sets_messenger_text(self):
+        self.app.store.dispatch(main.FILE_NOT_FOUND)
+        result = self.app.messenger.text
+        expect = "File not found"
+        self.assertEqual(expect, result)
+
+    def test_file_found_leaves_messenger_unaltered(self):
+        self.app.store.dispatch(main.FILE_FOUND)
+        result = self.app.messenger.text
+        expect = ""
+        self.assertEqual(expect, result)
+
     def check(self, state, expect):
         result = self.app.title_text(state)
         self.assertEqual(expect, result)
@@ -370,6 +382,22 @@ class TestReducer(unittest.TestCase):
                 "name": "GPM IMERG",
                 "active": True
             }
+        }
+        self.assertEqual(expect, result)
+
+    def test_file_not_found(self):
+        action = main.FILE_NOT_FOUND
+        result = main.reducer({}, action)
+        expect = {
+            "found": False
+        }
+        self.assertEqual(expect, result)
+
+    def test_file_found(self):
+        action = main.FILE_FOUND
+        result = main.reducer({}, action)
+        expect = {
+            "found": True
         }
         self.assertEqual(expect, result)
 
