@@ -551,9 +551,7 @@ def load_times(dataset):
 def hours_before(date):
     def wrapped(path):
         d = parse_time(path)
-        v = (date - d).total_seconds() / (60 * 60)
-        print(v)
-        return v
+        return (date - d).total_seconds() / (60 * 60)
     return wrapped
 
 
@@ -565,19 +563,27 @@ def find_file(paths, date):
     stamp_files = [
             path for path in paths
             if parse_time(path) is not None]
-    after_files = [
-            path for path in stamp_files
-            if parse_time(path) > date]
     before_files = [
             path for path in stamp_files
             if parse_time(path) <= date]
     before_files = sorted(before_files,
             key=hours_before(date))
-    search_paths = \
-            before_files + \
-            none_files
 
-    for path in search_paths:
+    for path in before_files:
+        with netCDF4.Dataset(path) as dataset:
+            values = dataset.variables["time_2_bnds"][:]
+            units = dataset.variables["time_2"].units
+        bounds = netCDF4.num2date(values, units=units)
+        start, end = np.min(bounds), np.max(bounds)
+        if date > end:
+            return
+        if start <= date <= end:
+            index = np.where(
+                    (bounds[:, 0] <= date) &
+                    (date < bounds[:, 1]))
+            return path, index[0]
+
+    for path in none_files:
         with netCDF4.Dataset(path) as dataset:
             values = dataset.variables["time_2_bnds"][:]
             units = dataset.variables["time_2"].units

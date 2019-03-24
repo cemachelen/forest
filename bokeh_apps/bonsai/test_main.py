@@ -302,6 +302,22 @@ class TestFindFileByValidDate(unittest.TestCase):
         expect = "file_20190102T0000Z.nc", 2
         self.assertEqual(expect, result)
 
+    def test_find_file_stops_if_after_recent_file(self):
+        paths = [
+                "file_20190101T0000Z.nc",
+                "file_20190102T0000Z.nc",
+                "file_20190103T0000Z.nc"]
+        self.paths = paths
+        start = dt.datetime(2019, 1, 3)
+        hours = [[0, 3], [3, 6], [6, 9]]
+        with netCDF4.Dataset(paths[2], "w") as dataset:
+            bounds = self.make_bounds(start, hours)
+            self.set_bounds(dataset, bounds)
+        date = dt.datetime(2019, 1, 10)
+        result = main.find_file(self.paths, date)
+        expect = None
+        self.assertEqual(expect, result)
+
     def make_bounds(self, start, hours):
         if isinstance(hours, list):
             hours = np.array(hours, dtype=int)
