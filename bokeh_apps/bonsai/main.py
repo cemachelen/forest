@@ -387,20 +387,14 @@ class Application(object):
             return
         paths = state["files"][name]
         valid_date = state["valid_date"]
-
-        print("exhaustively searching all files")
-        print(find_file(paths, valid_date))
-
-        # times = np.array([parse_time(path) for path in paths], dtype=object)
-        # try:
-        #     i = np.argmax(times[times < valid_date])
-        # except ValueError:
-        #     return
-        # path = paths[i]
-        # index = 0
-        # if self.load_needed(path, index, state):
-        #     print(path, index)
-        #     self.submit(Load(), self.load(path, index))
+        response = find_file(paths, valid_date)
+        if response is None:
+            if state.get("found", False):
+                self.store.dispatch(FILE_NOT_FOUND)
+        else:
+            path, index = response
+            if self.load_needed(path, index, state):
+                self.submit(Load(), self.load(path, index))
 
     @staticmethod
     def load_needed(path, index, state):
@@ -575,9 +569,9 @@ def find_file(paths, date):
             units = dataset.variables["time_2"].units
         bounds = netCDF4.num2date(values, units=units)
         start, end = np.min(bounds), np.max(bounds)
-        if date > end:
+        if date >= end:
             return
-        if start <= date <= end:
+        if start <= date < end:
             index = np.where(
                     (bounds[:, 0] <= date) &
                     (date < bounds[:, 1]))
