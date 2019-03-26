@@ -91,14 +91,19 @@ def select(dropdown):
 
 
 class Store(object):
-    def __init__(self, reducer, state=None):
+    def __init__(self, reducer, state=None, time_travel=False):
         self.reducer = reducer
         if state is None:
             state = State()
         self.state = state
         self._uid = 0
         self.listeners = OrderedDict()
-        self.actions = []
+        self.time_travel = time_travel
+        if self.time_travel:
+            self.actions = []
+            self.states = [
+                state
+            ]
 
     def uid(self):
         self._uid = self._uid + 1
@@ -106,7 +111,9 @@ class Store(object):
 
     def dispatch(self, action):
         self.state = self.reducer(self.state, action)
-        self.actions.append(action)
+        if self.time_travel:
+            self.actions.append(action)
+            self.states.append(self.state)
         for listener in self.listeners.values():
             listener()
 
@@ -119,52 +126,73 @@ class Store(object):
         del self.listeners[uid]
 
 
-class Active(object):
-    def __init__(self):
-        self.category = None
-        self.names = {}
-        self._attrs = ["name", "category"]
-
-    @property
-    def name(self):
-        if self.category is None:
-            return
-        if self.category not in self.names:
-            return
-        return self.names[self.category]
-
-    def __repr__(self):
-        kws = []
-        for attr in self._attrs:
-            eqn = "{}={}".format(attr, getattr(self, attr))
-            kws.append(eqn)
-        return "{}({})".format(
-            self.__class__.__name__,
-            ", ".join(kws))
+def if_none(value, default):
+    if value is None:
+        return default
+    return value
 
 
 class State(object):
-    def __init__(self):
-        self.active = Active()
-        self.valid_date = None
-        self.listing = False
-        self.found = False
-        self.loading = False
-        self.loaded = None
-        self.files = {}
-        self.found_files = {}
-        self.missing_files = set()
+    def __init__(
+            self,
+            name=None,
+            names=None,
+            category=None,
+            valid_date=None,
+            listing=False,
+            found=False,
+            found_files=None,
+            missing_files=None,
+            loading=False,
+            loaded=None,
+            files=None,):
+        self.name = name
+        self.names = if_none(names, {})
+        self.category = category
+        self.valid_date = valid_date
+        self.listing = listing
+        self.found = found
+        self.loading = loading
+        self.loaded = loaded
+        self.files = if_none(files, {})
+        self.found_files = if_none(found_files, {})
+        self.missing_files = if_none(missing_files, set())
+
+    def copy(self):
+        return State(
+            name=self.name,
+            names=dict(self.names),
+            category=self.category,
+            valid_date=self.valid_date,
+            found=self.found,
+            listing=self.listing,
+            loading=self.loading,
+            loaded=self.loaded,
+            files=dict(self.files),
+            found_files=dict(self.found_files),
+            missing_files=set(self.missing_files))
+
+    def __eq__(self, other):
+        return (
+            (self.name == other.name) and
+            (self.names == other.names) and
+            (self.category == other.category) and
+            (self.valid_date == other.valid_date) and
+            (self.found == other.found) and
+            (self.listing == other.listing) and
+            (self.loading == other.loading) and
+            (self.loaded == other.loaded) and
+            (self.files == other.files) and
+            (self.found_files == other.found_files) and
+            (self.missing_files == other.missing_files)
+        )
 
     def __repr__(self):
         attrs = [
-            "active",
-            "valid_date",
-            "listing",
-            "found",
-            "loading",
-            "loaded",
-            "found_files",
-            "missing_files",
+            "name",
+            "names",
+            "category",
+            "valid_date"
         ]
         kws = []
         for attr in attrs:
@@ -178,7 +206,7 @@ class State(object):
 def reducer(state, action):
     if isinstance(action, dict):
         action = PropAction(action)
-    state = copy.copy(state)
+    state = state.copy()
     if action.kind == "SET_VALID_DATE":
         state.valid_date = action.value
     elif action.kind == "FILE_NOT_FOUND":
@@ -188,10 +216,12 @@ def reducer(state, action):
         state.found_files[action.key] = action.value
         state.found = True
     elif action.kind == "ACTIVATE":
-        state.active.category = action.category
+        state.category = action.category
+        state.name = state.names.get(action.category, None)
     elif action.kind == "SET_NAME":
-        state.active.category = action.category
-        state.active.names[action.category] = action.text
+        state.name = action.text
+        state.category = action.category
+        state.names[action.category] = action.text
     elif action.kind == "REQUEST":
         if action.status == "succeed":
             setattr(state, action.flag, False)
@@ -417,22 +447,22 @@ class Application(object):
             self.messenger.text = ""
 
         if not state.listing:
-            if state.active.name is not None:
-                name = state.active.name
-                pattern = self.patterns[state.active.name]
+            if state.name is not None:
+                name = state.name
+                pattern = self.patterns[state.name]
                 if name not in state.files:
                     self.submit(List(), self.list_files(name, pattern))
 
         # Query disk/cloud for file
-        if not ((state.active.name is None) or (state.valid_date is None)):
+        if not ((state.name is None) or (state.valid_date is None)):
             key = (
-                state.active.name,
+                state.name,
                 state.valid_date)
             if (
                     (key not in state.missing_files) and
                     (key not in state.found_files)):
                 response = find_file(
-                    state.files[state.active.name],
+                    state.files[state.name],
                     state.valid_date)
                 if response is None:
                     self.store.dispatch(FileNotFound(key))
@@ -512,8 +542,8 @@ class Application(object):
 
     def title_text(self, state):
         parts = []
-        if state.active.name is not None:
-            parts.append(state.active.name)
+        if state.name is not None:
+            parts.append(state.name)
         if state.valid_date is not None:
             parts.append(state.valid_date.strftime("%Y-%m-%d %H:%M"))
         return " ".join(parts)

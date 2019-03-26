@@ -283,7 +283,7 @@ class TestState(unittest.TestCase):
         for action in actions:
             state = main.reducer(state, action)
         self.assertEqual(state.found, True)
-        self.assertEqual(state.active.category, "model")
+        self.assertEqual(state.category, "model")
 
     def test_reducer_given_model_and_observations(self):
         state = main.State()
@@ -297,8 +297,8 @@ class TestState(unittest.TestCase):
         ]
         for action in actions:
             state = main.reducer(state, action)
-        self.assertEqual(state.active.category, "model")
-        self.assertEqual(state.active.name, "B")
+        self.assertEqual(state.category, "model")
+        self.assertEqual(state.name, "B")
 
 
 class TestFindFileByValidDate(unittest.TestCase):
@@ -432,13 +432,13 @@ class TestStore(unittest.TestCase):
     def test_reducer_set_model_name(self):
         action = main.SetName("model", "Tropical Africa 4.4km")
         result = main.reducer(main.State(), action)
-        self.assertEqual(result.active.name, "Tropical Africa 4.4km")
+        self.assertEqual(result.name, "Tropical Africa 4.4km")
 
     def test_reducer_set_observation_name(self):
         action = main.SetName("observation", "GPM IMERG")
         result = main.reducer(main.State(), action)
-        self.assertEqual(result.active.category, "observation")
-        self.assertEqual(result.active.name, "GPM IMERG")
+        self.assertEqual(result.category, "observation")
+        self.assertEqual(result.name, "GPM IMERG")
 
     def test_store_subscribe(self):
         action = main.SetName("model", "Model")
@@ -456,15 +456,32 @@ class TestStore(unittest.TestCase):
         self.store.dispatch(action)
         listener.assert_called_once_with()
 
-    def test_store_keeps_actions(self):
+    def test_debug_keeps_actions_and_intermediate_states(self):
+        self.maxDiff = None
+        date = dt.datetime(2019, 1, 1)
         actions = [
             main.SetName("model", "Model"),
-            main.SetValidDate(dt.datetime(2019, 1, 1))
+            main.SetValidDate(date)
         ]
-        store = main.Store(main.reducer)
+        store = main.Store(main.reducer, time_travel=True)
         for action in actions:
             store.dispatch(action)
         self.assertEqual(store.actions, actions)
+        expect = [
+            main.State(),
+            main.State(
+                name="Model",
+                names={"model": "Model"},
+                category="model"),
+            main.State(
+                name="Model",
+                names={"model": "Model"},
+                category="model",
+                valid_date=date)
+        ]
+        self.assertEqual(len(expect), len(store.states))
+        for e, r in zip(expect, store.states):
+            self.assertEqual(e, r)
 
 
 class TestReducer(unittest.TestCase):
@@ -504,15 +521,15 @@ class TestReducer(unittest.TestCase):
             "data": {"x": []}
         })
 
-    def test_reducer_sets_active_name(self):
+    def test_reducer_sets_name(self):
         state = main.State()
         for action in [
                 main.Action.set_observation_name("GPM IMERG"),
                 main.Action.activate("observation")]:
             state = main.reducer(state, action)
         result = state
-        self.assertEqual(result.active.category, "observation")
-        self.assertEqual(result.active.name, "GPM IMERG")
+        self.assertEqual(result.category, "observation")
+        self.assertEqual(result.name, "GPM IMERG")
 
     def test_file_not_found(self):
         result = main.reducer(self.state, main.FileNotFound("k"))
@@ -540,7 +557,7 @@ class TestAction(unittest.TestCase):
                 main.Action.activate("model")]:
             state = main.reducer(state, action)
         result = state
-        self.assertEqual(result.active.category, "model")
+        self.assertEqual(result.category, "model")
 
     def test_request_started(self):
         result = main.Request("flag").started()
