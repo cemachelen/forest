@@ -98,6 +98,7 @@ class Store(object):
         self.state = state
         self._uid = 0
         self.listeners = OrderedDict()
+        self.actions = []
 
     def uid(self):
         self._uid = self._uid + 1
@@ -105,6 +106,7 @@ class Store(object):
 
     def dispatch(self, action):
         self.state = self.reducer(self.state, action)
+        self.actions.append(action)
         for listener in self.listeners.values():
             listener()
 
@@ -225,13 +227,6 @@ class Action(object):
             call_args)
 
     @staticmethod
-    def set_valid_date(date):
-        return {
-            "type": "SET_VALID_DATE",
-            "value": date
-        }
-
-    @staticmethod
     def set_observation_name(text):
         return Action.set_name("observation", text)
 
@@ -268,6 +263,14 @@ class SetName(Action):
         self.category = category
         self.text = text
         self._props = ["category", "text"]
+
+
+class SetValidDate(Action):
+    kind = "SET_VALID_DATE"
+    _props = ["value"]
+
+    def __init__(self, date):
+        self.value = date
 
 
 class Request(object):
@@ -364,7 +367,7 @@ class Application(object):
         self.datetime_picker = bonsai.DatetimePicker()
         self.datetime_picker.date_picker.title = "Valid date"
         self.datetime_picker.on_change(
-            "value", self.on_change(Action.set_valid_date))
+            "value", self.on_change(SetValidDate))
 
         overlay_checkboxes = bokeh.models.CheckboxGroup(
             labels=["MSLP", "Wind vectors"],

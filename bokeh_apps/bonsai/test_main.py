@@ -199,7 +199,7 @@ class TestApplication(unittest.TestCase):
 
     def test_title_text_given_valid_date(self):
         date = dt.datetime(2019, 1, 1)
-        state = main.reducer(main.State(), main.Action.set_valid_date(date))
+        state = main.reducer(main.State(), main.SetValidDate(date))
         self.check(state, "2019-01-01 00:00")
 
     def test_title_text_given_observation_name(self):
@@ -250,7 +250,7 @@ class TestState(unittest.TestCase):
     def test_reducer(self):
         valid_date = dt.datetime(2019, 1, 1)
         state = main.State()
-        action = main.Action.set_valid_date(valid_date)
+        action = main.SetValidDate(valid_date)
         result = main.reducer(state, action).valid_date
         expect = valid_date
         self.assertEqual(expect, result)
@@ -267,7 +267,7 @@ class TestState(unittest.TestCase):
     def test_reducer_given_multiple_actions(self):
         date = dt.datetime(2019, 1, 1)
         state = main.State()
-        actions = [main.Action.set_valid_date(date),
+        actions = [main.SetValidDate(date),
                    main.FileFound("k", "v")]
         for action in actions:
             state = main.reducer(state, action)
@@ -417,7 +417,7 @@ class TestStore(unittest.TestCase):
         self.store = main.Store(main.reducer)
 
     def test_set_valid_date(self):
-        action = main.Action.set_valid_date(dt.datetime(2019, 1, 1))
+        action = main.SetValidDate(dt.datetime(2019, 1, 1))
         self.store.dispatch(action)
         result = self.store.state.valid_date
         expect = dt.datetime(2019, 1, 1)
@@ -455,6 +455,16 @@ class TestStore(unittest.TestCase):
         unsubscribe()
         self.store.dispatch(action)
         listener.assert_called_once_with()
+
+    def test_store_keeps_actions(self):
+        actions = [
+            main.SetName("model", "Model"),
+            main.SetValidDate(dt.datetime(2019, 1, 1))
+        ]
+        store = main.Store(main.reducer)
+        for action in actions:
+            store.dispatch(action)
+        self.assertEqual(store.actions, actions)
 
 
 class TestReducer(unittest.TestCase):
