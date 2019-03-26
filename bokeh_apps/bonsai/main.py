@@ -270,16 +270,6 @@ class SetName(Action):
         self._props = ["category", "text"]
 
 
-class SetModelName(SetName):
-    def __init__(self, text):
-        super().__init__("model", text)
-
-
-class SetObservationName(SetName):
-    def __init__(self, text):
-        super().__init__("observation", text)
-
-
 class Request(object):
     def __init__(self, flag):
         self.flag = flag

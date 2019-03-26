@@ -190,7 +190,7 @@ class TestApplication(unittest.TestCase):
     def test_application_given_state(self):
         state = main.State()
         state = main.reducer(state, main.Action.activate("model"))
-        state = main.reducer(state, main.SetModelName("Model"))
+        state = main.reducer(state, main.SetName("model", "Model"))
         self.app.render(state)
         self.assertEqual(self.app.title.text, "Model")
 
@@ -424,31 +424,31 @@ class TestStore(unittest.TestCase):
         self.assertEqual(expect, result)
 
     def test_action_set_model_name(self):
-        action = main.SetModelName("East Africa 4.4km")
+        action = main.SetName("model", "East Africa 4.4km")
         self.assertEqual(action.kind, "SET_NAME")
         self.assertEqual(action.category, "model")
         self.assertEqual(action.text, "East Africa 4.4km")
 
     def test_reducer_set_model_name(self):
-        action = main.SetModelName("Tropical Africa 4.4km")
+        action = main.SetName("model", "Tropical Africa 4.4km")
         result = main.reducer(main.State(), action)
         self.assertEqual(result.active.name, "Tropical Africa 4.4km")
 
     def test_reducer_set_observation_name(self):
-        action = main.SetObservationName("GPM IMERG")
+        action = main.SetName("observation", "GPM IMERG")
         result = main.reducer(main.State(), action)
         self.assertEqual(result.active.category, "observation")
         self.assertEqual(result.active.name, "GPM IMERG")
 
     def test_store_subscribe(self):
-        action = main.SetModelName("Model")
+        action = main.SetName("model", "Model")
         listener = unittest.mock.Mock()
         unsubscribe = self.store.subscribe(listener)
         self.store.dispatch(action)
         listener.assert_called_once_with()
 
     def test_store_unsubscribe(self):
-        action = main.SetModelName("Model")
+        action = main.SetName("model", "Model")
         listener = unittest.mock.Mock()
         unsubscribe = self.store.subscribe(listener)
         self.store.dispatch(action)
