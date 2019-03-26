@@ -210,8 +210,9 @@ class TestApplication(unittest.TestCase):
             state = main.reducer(state, action)
         self.check(state, "GPM")
 
-    def test_file_not_found_sets_messenger_text(self):
-        self.app.store.dispatch(main.FileNotFound("key"))
+    def test_render(self):
+        state = main.reducer(main.State(), main.FileNotFound("key"))
+        self.app.render(state)
         result = self.app.messenger.text
         expect = "File not found"
         self.assertEqual(expect, result)
@@ -234,14 +235,11 @@ class TestState(unittest.TestCase):
     def test_listing(self):
         self.check("listing", False)
 
-    def test_found(self):
-        self.check("found", False)
-
     def test_loading(self):
         self.check("loading", False)
 
-    def test_files(self):
-        self.check("files", {})
+    def test_listed(self):
+        self.check("listed", {})
 
     def check(self, attr, expect):
         result = getattr(main.State(), attr)
@@ -272,7 +270,7 @@ class TestState(unittest.TestCase):
         for action in actions:
             state = main.reducer(state, action)
         self.assertEqual(state.valid_date, dt.datetime(2019, 1, 1))
-        self.assertEqual(state.found, True)
+        self.assertEqual(state.file_not_found, False)
         self.assertEqual(state.found_files, {"k": "v"})
 
     def test_reducer_given_activate_sets_selected_name(self):
@@ -282,7 +280,7 @@ class TestState(unittest.TestCase):
             main.Action.activate("model")]
         for action in actions:
             state = main.reducer(state, action)
-        self.assertEqual(state.found, True)
+        self.assertEqual(state.file_not_found, False)
         self.assertEqual(state.category, "model")
 
     def test_reducer_given_model_and_observations(self):
@@ -299,6 +297,32 @@ class TestState(unittest.TestCase):
             state = main.reducer(state, action)
         self.assertEqual(state.category, "model")
         self.assertEqual(state.name, "B")
+
+    def test_reducer_given_models(self):
+        state = main.State()
+        actions = [
+            main.SetName("model", "A"),
+            main.SetName("model", "B"),
+            main.SetName("model", "C")
+        ]
+        for action in actions:
+            state = main.reducer(state, action)
+        self.assertEqual(state.category, "model")
+        self.assertEqual(state.name, "C")
+
+    def test_reset_loaded(self):
+        action = main.Reset("loaded")
+        self.assertEqual(action.kind, "RESET")
+        self.assertEqual(action.attr, "loaded")
+        self.assertEqual(action.value, None)
+
+    def test_reducer_given_reset_loaded(self):
+        state = main.State()
+        for action in [
+                main.Load().finished("payload"),
+                main.Reset("loaded")]:
+            state = main.reducer(state, action)
+        self.assertEqual(state.loaded, None)
 
 
 class TestFindFileByValidDate(unittest.TestCase):
@@ -410,6 +434,8 @@ class TestFindFileByValidDate(unittest.TestCase):
         var = dataset.createVariable(
                 "time_2_bnds", "d", ("time_2", "bnds"))
         var[:] = netCDF4.date2num(bounds, units)
+        var = dataset.createVariable(
+                "stratiform_rainfall_rate", "d", ("time_2",))
 
 
 class TestStore(unittest.TestCase):
@@ -497,7 +523,7 @@ class TestReducer(unittest.TestCase):
         response = {"Tropical Africa": ["file.nc"]}
         result = main.reducer(state, main.List().finished(response))
         self.assertEqual(result.listing, False)
-        self.assertEqual(result.files, {
+        self.assertEqual(result.listed, {
             "Tropical Africa": ["file.nc"]
         })
 
@@ -533,11 +559,11 @@ class TestReducer(unittest.TestCase):
 
     def test_file_not_found(self):
         result = main.reducer(self.state, main.FileNotFound("k"))
-        self.assertEqual(result.found, False)
+        self.assertEqual(result.file_not_found, True)
 
     def test_file_found(self):
         result = main.reducer(self.state, main.FileFound("k", "v"))
-        self.assertEqual(result.found, True)
+        self.assertEqual(result.file_not_found, False)
 
 
 class TestAction(unittest.TestCase):

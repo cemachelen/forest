@@ -140,21 +140,21 @@ class State(object):
             category=None,
             valid_date=None,
             listing=False,
-            found=False,
+            file_not_found=False,
             found_files=None,
             missing_files=None,
             loading=False,
             loaded=None,
-            files=None,):
+            listed=None,):
         self.name = name
         self.names = if_none(names, {})
         self.category = category
         self.valid_date = valid_date
         self.listing = listing
-        self.found = found
+        self.listed = if_none(listed, {})
+        self.file_not_found = file_not_found
         self.loading = loading
         self.loaded = loaded
-        self.files = if_none(files, {})
         self.found_files = if_none(found_files, {})
         self.missing_files = if_none(missing_files, set())
 
@@ -164,11 +164,11 @@ class State(object):
             names=dict(self.names),
             category=self.category,
             valid_date=self.valid_date,
-            found=self.found,
+            file_not_found=self.file_not_found,
             listing=self.listing,
             loading=self.loading,
             loaded=self.loaded,
-            files=dict(self.files),
+            listed=dict(self.listed),
             found_files=dict(self.found_files),
             missing_files=set(self.missing_files))
 
@@ -178,11 +178,11 @@ class State(object):
             (self.names == other.names) and
             (self.category == other.category) and
             (self.valid_date == other.valid_date) and
-            (self.found == other.found) and
+            (self.file_not_found == other.file_not_found) and
             (self.listing == other.listing) and
             (self.loading == other.loading) and
             (self.loaded == other.loaded) and
-            (self.files == other.files) and
+            (self.listed == other.listed) and
             (self.found_files == other.found_files) and
             (self.missing_files == other.missing_files)
         )
@@ -211,10 +211,10 @@ def reducer(state, action):
         state.valid_date = action.value
     elif action.kind == "FILE_NOT_FOUND":
         state.missing_files.add(action.key)
-        state.found = False
+        state.file_not_found = True
     elif action.kind == "FILE_FOUND":
         state.found_files[action.key] = action.value
-        state.found = True
+        state.file_not_found = False
     elif action.kind == "ACTIVATE":
         state.category = action.category
         state.name = state.names.get(action.category, None)
@@ -226,11 +226,13 @@ def reducer(state, action):
         if action.status == "succeed":
             setattr(state, action.flag, False)
             if action.flag == "listing":
-                state.files.update(action.response)
+                state.listed.update(action.response)
             else:
                 state.loaded = action.response
         else:
             setattr(state, action.flag, True)
+    elif action.kind == "RESET":
+        setattr(state, action.attr, None)
     return state
 
 
@@ -352,10 +354,20 @@ class FileFound(Action):
         self._props = ["key", "value"]
 
 
+class Reset(Action):
+    kind = "RESET"
+
+    def __init__(self, attr, value=None):
+        self.attr = attr
+        self.value = value
+
+
 class Application(object):
     def __init__(self, config, directory=None):
-        self.store = Store(reducer)
-        self.unsubscribe = self.store.subscribe(self.state_change)
+        self.store = Store(reducer, time_travel=True)
+        self.unsubscribe = self.store.subscribe(self.on_render)
+        self.unsubscribe = self.store.subscribe(self.on_list)
+        self.unsubscribe = self.store.subscribe(self.on_find)
         self.document = bokeh.plotting.curdoc()
         self.executor = ThreadPoolExecutor(max_workers=2)
         self.patterns = file_patterns(
@@ -402,16 +414,8 @@ class Application(object):
         overlay_checkboxes = bokeh.models.CheckboxGroup(
             labels=["MSLP", "Wind vectors"],
             inline=True)
-        minus, div, plus = (
-            bokeh.models.Button(label="-", width=135),
-            bokeh.models.Div(text="", width=10),
-            bokeh.models.Button(label="+", width=135))
         self.tabs = bokeh.models.Tabs(tabs=[
             bokeh.models.Panel(child=bokeh.layouts.column(
-                bokeh.layouts.row(
-                    bokeh.layouts.column(minus),
-                    bokeh.layouts.column(div),
-                    bokeh.layouts.column(plus)),
                 self.dropdowns["model"],
                 self.dropdowns["field"],
                 overlay_checkboxes,
@@ -433,49 +437,45 @@ class Application(object):
         else:
             self.store.dispatch(Action.activate("observation"))
 
-    def state_change(self):
-        state = self.store.state
-        print(state)
+    def on_render(self):
+        self.render(self.store.state)
 
+    def on_list(self):
+        state = self.store.state
+        if state.listing:
+            return
+        if state.name is None:
+            return
+        if (state.listed is None) or (state.name not in state.listed):
+            pattern = self.patterns[state.name]
+            self.submit(List(), self.list_files(state.name, pattern))
+
+    def on_find(self):
+        state = self.store.state
+        if state.name is None:
+            return
+        if state.valid_date is None:
+            return
+        if state.name not in state.listed:
+            return
+        paths = state.listed[state.name]
+        date = state.valid_date
+        print(find_file(paths, date))
+
+    def render(self, state):
         if state.listing:
             self.messenger.text = "Searching..."
         elif state.loading:
             self.messenger.text = "Loading..."
-        elif not state.found:
+        elif state.file_not_found:
             self.messenger.text = "File not found"
         else:
             self.messenger.text = ""
-
-        if not state.listing:
-            if state.name is not None:
-                name = state.name
-                pattern = self.patterns[state.name]
-                if name not in state.files:
-                    self.submit(List(), self.list_files(name, pattern))
-
-        # Query disk/cloud for file
-        if not ((state.name is None) or (state.valid_date is None)):
-            key = (
-                state.name,
-                state.valid_date)
-            if (
-                    (key not in state.missing_files) and
-                    (key not in state.found_files)):
-                response = find_file(
-                    state.files[state.name],
-                    state.valid_date)
-                if response is None:
-                    self.store.dispatch(FileNotFound(key))
-                else:
-                    self.store.dispatch(FileFound(key, response))
-
-            if state.found:
-                path, index = state.found_files[key]
-                if not state.loading:
-                    if self.load_needed(state, path, index):
-                        self.submit(Load(), self.load(path, index))
-
-        self.render(state)
+        self.title.text = self.title_text(state)
+        if state.loaded is not None:
+            self.image.source.data = state.loaded["data"]
+        if state.file_not_found:
+            self.image.empty()
 
     @staticmethod
     def load_needed(state, path, index):
@@ -534,11 +534,6 @@ class Application(object):
         def wrapper(attr, old, new):
             self.store.dispatch(action_method(new))
         return wrapper
-
-    def render(self, state):
-        self.title.text = self.title_text(state)
-        if state.loaded is not None:
-            self.image.source.data = state.loaded["data"]
 
     def title_text(self, state):
         parts = []
@@ -607,7 +602,6 @@ def as_menu(items):
     return [(item, item) for item in items]
 
 
-@timed
 def find_file(paths, date):
     none_files = [
             path for path in paths
@@ -618,8 +612,8 @@ def find_file(paths, date):
     before_files = [
             path for path in stamp_files
             if parse_time(path) <= date]
-    before_files = sorted(before_files,
-            key=hours_before(date))
+    before_files = sorted(
+        before_files, key=hours_before(date))
 
     for path in before_files:
         bounds = load_time_bounds(path)
@@ -645,19 +639,24 @@ def time_index(bounds, date):
     return index[0][0]
 
 
-@lru_cache()
+VARIABLES = [
+    "stratiform_rainfall_rate",
+    "stratiform_rainfall_flux",
+    "precipitation_flux"
+]
+
+
 def load_time_bounds(path):
     bounds = None
     with netCDF4.Dataset(path) as dataset:
-        for name in ["time_2", "time"]:
-            if name not in dataset.variables:
-                continue
-            if name + "_bnds" not in dataset.variables:
-                continue
-            values = dataset.variables[name + "_bnds"][:]
-            units = dataset.variables[name].units
-            bounds = netCDF4.num2date(values, units=units)
-            break
+        for v in VARIABLES:
+            if v in dataset.variables:
+                time_dim = dataset.variables[v].dimensions[0]
+                values = dataset.variables[time_dim + "_bnds"][:]
+                units = dataset.variables[time_dim].units
+                print(values, units)
+                bounds = netCDF4.num2date(values, units=units)
+                break
     return bounds
 
 
@@ -740,6 +739,9 @@ class Image(object):
             bar_line_color="black")
         figure.add_layout(colorbar, 'center')
 
+    def empty(self):
+        self.source.data = self.empty_data
+
 
 def load(path, valid_time):
     with netCDF4.Dataset(path) as dataset:
@@ -751,19 +753,15 @@ def load(path, valid_time):
 
 
 def load_index(dataset, index):
-    try:
-        lons = dataset.variables["longitude_0"][:]
-    except KeyError:
-        lons = dataset.variables["longitude"][:]
-    try:
-        lats = dataset.variables["latitude_0"][:]
-    except KeyError:
-        lats = dataset.variables["latitude"][:]
-    try:
-        var = dataset.variables["stratiform_rainfall_rate"]
-    except KeyError:
-        var = dataset.variables["precipitation_flux"]
-    values = var[index]
+    for v in VARIABLES:
+        if v not in dataset.variables:
+            continue
+        var = dataset.variables[v]
+        lats = dataset.variables[var.dimensions[1]][:]
+        lons = dataset.variables[var.dimensions[2]][:]
+        values = var[index]
+        break
+
     if var.units == "mm h-1":
         values = values
     else:
