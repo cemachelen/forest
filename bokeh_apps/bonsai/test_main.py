@@ -188,22 +188,22 @@ class TestApplication(unittest.TestCase):
         self.app = main.Application(main.Config())
 
     def test_application_given_state(self):
-        state = {}
+        state = main.State()
         state = main.reducer(state, main.Action.activate("model"))
-        state = main.reducer(state, main.Action.set_model_name("Model"))
+        state = main.reducer(state, main.SetName("model", "Model"))
         self.app.render(state)
         self.assertEqual(self.app.title.text, "Model")
 
     def test_title_text(self):
-        self.check({}, "")
+        self.check(main.State(), "")
 
     def test_title_text_given_valid_date(self):
         date = dt.datetime(2019, 1, 1)
-        state = main.reducer({}, main.Action.set_valid_date(date))
+        state = main.reducer(main.State(), main.Action.set_valid_date(date))
         self.check(state, "2019-01-01 00:00")
 
     def test_title_text_given_observation_name(self):
-        state = {}
+        state = main.State()
         for action in [
                 main.Action.activate("observation"),
                 main.Action.set_name("observation", "GPM")]:
@@ -211,13 +211,13 @@ class TestApplication(unittest.TestCase):
         self.check(state, "GPM")
 
     def test_file_not_found_sets_messenger_text(self):
-        self.app.store.dispatch(main.FILE_NOT_FOUND)
+        self.app.store.dispatch(main.FileNotFound("key"))
         result = self.app.messenger.text
         expect = "File not found"
         self.assertEqual(expect, result)
 
     def test_file_found_leaves_messenger_unaltered(self):
-        self.app.store.dispatch(main.FILE_FOUND)
+        self.app.store.dispatch(main.FileFound("key", "value"))
         result = self.app.messenger.text
         expect = ""
         self.assertEqual(expect, result)
@@ -225,6 +225,80 @@ class TestApplication(unittest.TestCase):
     def check(self, state, expect):
         result = self.app.title_text(state)
         self.assertEqual(expect, result)
+
+
+class TestState(unittest.TestCase):
+    def test_valid_date(self):
+        self.check("valid_date", None)
+
+    def test_listing(self):
+        self.check("listing", False)
+
+    def test_found(self):
+        self.check("found", False)
+
+    def test_loading(self):
+        self.check("loading", False)
+
+    def test_files(self):
+        self.check("files", {})
+
+    def check(self, attr, expect):
+        result = getattr(main.State(), attr)
+        self.assertEqual(expect, result)
+
+    def test_reducer(self):
+        valid_date = dt.datetime(2019, 1, 1)
+        state = main.State()
+        action = main.Action.set_valid_date(valid_date)
+        result = main.reducer(state, action).valid_date
+        expect = valid_date
+        self.assertEqual(expect, result)
+
+    def test_reducer_given_file_not_found(self):
+        state = main.State()
+        action = main.FileNotFound(("Model", dt.datetime(2019, 1, 1)))
+        result = main.reducer(state, action).missing_files
+        expect = set([
+            ("Model", dt.datetime(2019, 1, 1))
+        ])
+        self.assertEqual(expect, result)
+
+    def test_reducer_given_multiple_actions(self):
+        date = dt.datetime(2019, 1, 1)
+        state = main.State()
+        actions = [main.Action.set_valid_date(date),
+                   main.FileFound("k", "v")]
+        for action in actions:
+            state = main.reducer(state, action)
+        self.assertEqual(state.valid_date, dt.datetime(2019, 1, 1))
+        self.assertEqual(state.found, True)
+        self.assertEqual(state.found_files, {"k": "v"})
+
+    def test_reducer_given_activate_sets_selected_name(self):
+        state = main.State()
+        actions = [
+            main.FileFound("k", "v"),
+            main.Action.activate("model")]
+        for action in actions:
+            state = main.reducer(state, action)
+        self.assertEqual(state.found, True)
+        self.assertEqual(state.active.category, "model")
+
+    def test_reducer_given_model_and_observations(self):
+        state = main.State()
+        actions = [
+            main.Action.set_name("model", "A"),
+            main.Action.set_name("model", "B"),
+            main.Action.set_name("observation", "C"),
+            main.Action.activate("model"),
+            main.Action.activate("observation"),
+            main.Action.activate("model"),
+        ]
+        for action in actions:
+            state = main.reducer(state, action)
+        self.assertEqual(state.active.category, "model")
+        self.assertEqual(state.active.name, "B")
 
 
 class TestFindFileByValidDate(unittest.TestCase):
@@ -342,92 +416,39 @@ class TestStore(unittest.TestCase):
     def setUp(self):
         self.store = main.Store(main.reducer)
 
-    def test_store(self):
-        action = {
-            "type": "SET_TITLE",
-            "text": "Hello, world!"
-        }
-        self.store.dispatch(action)
-        result = self.store.state
-        expect = {"title": "Hello, world!"}
-        self.assertEqual(expect, result)
-
     def test_set_valid_date(self):
         action = main.Action.set_valid_date(dt.datetime(2019, 1, 1))
         self.store.dispatch(action)
-        result = self.store.state
-        expect = {"valid_date": dt.datetime(2019, 1, 1)}
-        self.assertEqual(expect, result)
-
-    def test_set_forecast_action(self):
-        valid_date = dt.datetime(2019, 1, 1)
-        length = dt.timedelta(hours=12)
-        result = main.Action.set_forecast(valid_date, length)
-        expect = {
-            "type": "SET_FORECAST",
-            "valid_date": valid_date,
-            "length": length,
-            "run_date": dt.datetime(2018, 12, 31, 12)
-        }
-        self.assertEqual(expect, result)
-
-    def test_reducer_given_set_forecast(self):
-        valid_date = dt.datetime(2019, 1, 1)
-        length = dt.timedelta(hours=12)
-        action = main.Action.set_forecast(valid_date, length)
-        result = main.reducer({}, action)
-        expect = {
-            "valid_date": valid_date,
-            "length": length,
-            "run_date": dt.datetime(2018, 12, 31, 12)
-        }
+        result = self.store.state.valid_date
+        expect = dt.datetime(2019, 1, 1)
         self.assertEqual(expect, result)
 
     def test_action_set_model_name(self):
-        result = main.Action.set_model_name("East Africa 4.4km")
-        expect = {
-            "type": "SET_NAME",
-            "category": "model",
-            "text": "East Africa 4.4km"
-        }
-        self.assertEqual(expect, result)
+        action = main.SetName("model", "East Africa 4.4km")
+        self.assertEqual(action.kind, "SET_NAME")
+        self.assertEqual(action.category, "model")
+        self.assertEqual(action.text, "East Africa 4.4km")
 
     def test_reducer_set_model_name(self):
-        action = main.Action.set_model_name("Tropical Africa 4.4km")
-        result = main.reducer({}, action)
-        expect = {
-            "model": {
-                "name": "Tropical Africa 4.4km"
-            }
-        }
-        self.assertEqual(expect, result)
+        action = main.SetName("model", "Tropical Africa 4.4km")
+        result = main.reducer(main.State(), action)
+        self.assertEqual(result.active.name, "Tropical Africa 4.4km")
 
-    def test_reducer_set_observation(self):
-        action = main.Action.set_observation_name("GPM IMERG")
-        expect = {
-            "observation": {
-                "name": "GPM IMERG"
-            }
-        }
-        self.check(action, expect)
-
-    def test_reducer_set_field(self):
-        action = main.Action.set_model_field("Precipitation")
-        self.check(action, {"model": {"field": "Precipitation"}})
-
-    def check(self, action, expect):
-        result = main.reducer({}, action)
-        self.assertEqual(expect, result)
+    def test_reducer_set_observation_name(self):
+        action = main.Action.set_name("observation", "GPM IMERG")
+        result = main.reducer(main.State(), action)
+        self.assertEqual(result.active.category, "observation")
+        self.assertEqual(result.active.name, "GPM IMERG")
 
     def test_store_subscribe(self):
-        action = main.Action.set_model_name("Model")
+        action = main.SetName("model", "Model")
         listener = unittest.mock.Mock()
         unsubscribe = self.store.subscribe(listener)
         self.store.dispatch(action)
         listener.assert_called_once_with()
 
     def test_store_unsubscribe(self):
-        action = main.Action.set_model_name("Model")
+        action = main.SetName("model", "Model")
         listener = unittest.mock.Mock()
         unsubscribe = self.store.subscribe(listener)
         self.store.dispatch(action)
@@ -437,30 +458,25 @@ class TestStore(unittest.TestCase):
 
 
 class TestReducer(unittest.TestCase):
+    def setUp(self):
+        self.state = main.State()
+
     def test_reducer_on_pending_glob_request(self):
-        result = main.reducer({}, main.List().started())
-        expect = {
-            "listing": True
-        }
-        self.assertEqual(expect, result)
+        result = main.reducer(self.state, main.List().started())
+        self.assertEqual(result.listing, True)
 
     def test_reducer_on_successful_glob_request(self):
+        state = main.State()
         response = {"Tropical Africa": ["file.nc"]}
-        result = main.reducer({}, main.List().finished(response))
-        expect = {
-            "listing": False,
-            "files": {
-                "Tropical Africa": ["file.nc"]
-            }
-        }
-        self.assertEqual(expect, result)
+        result = main.reducer(state, main.List().finished(response))
+        self.assertEqual(result.listing, False)
+        self.assertEqual(result.files, {
+            "Tropical Africa": ["file.nc"]
+        })
 
     def test_reducer_on_pending_load_request(self):
-        result = main.reducer({}, main.Load().started())
-        expect = {
-            "loading": True
-        }
-        self.assertEqual(expect, result)
+        result = main.reducer(self.state, main.Load().started())
+        self.assertEqual(result.loading, True)
 
     def test_reducer_on_finished_load_request(self):
         response = {
@@ -470,47 +486,31 @@ class TestReducer(unittest.TestCase):
                 "x": []
             }
         }
-        result = main.reducer({}, main.Load().finished(response))
-        expect = {
-            "loading": False,
-            "loaded": {
-                "name": "GPM IMERG",
-                "valid_date": dt.datetime(2019, 1, 1),
-                "data": {"x": []}
-            }
-        }
-        self.assertEqual(expect, result)
+        result = main.reducer(main.State(), main.Load().finished(response))
+        self.assertEqual(result.loading, False)
+        self.assertEqual(result.loaded, {
+            "name": "GPM IMERG",
+            "valid_date": dt.datetime(2019, 1, 1),
+            "data": {"x": []}
+        })
 
     def test_reducer_sets_active_name(self):
-        state = {}
+        state = main.State()
         for action in [
                 main.Action.set_observation_name("GPM IMERG"),
                 main.Action.activate("observation")]:
             state = main.reducer(state, action)
         result = state
-        expect = {
-            "observation": {
-                "name": "GPM IMERG",
-                "active": True
-            }
-        }
-        self.assertEqual(expect, result)
+        self.assertEqual(result.active.category, "observation")
+        self.assertEqual(result.active.name, "GPM IMERG")
 
     def test_file_not_found(self):
-        action = main.FILE_NOT_FOUND
-        result = main.reducer({}, action)
-        expect = {
-            "found": False
-        }
-        self.assertEqual(expect, result)
+        result = main.reducer(self.state, main.FileNotFound("k"))
+        self.assertEqual(result.found, False)
 
     def test_file_found(self):
-        action = main.FILE_FOUND
-        result = main.reducer({}, action)
-        expect = {
-            "found": True
-        }
-        self.assertEqual(expect, result)
+        result = main.reducer(self.state, main.FileFound("k", "v"))
+        self.assertEqual(result.found, True)
 
 
 class TestAction(unittest.TestCase):
@@ -523,18 +523,14 @@ class TestAction(unittest.TestCase):
         self.assertEqual(expect, result)
 
     def test_reducer_given_two_activate_actions(self):
-        state = {}
+        state = main.State()
         for action in [
                 main.Action.activate("observation"),
                 main.Action.deactivate("observation"),
                 main.Action.activate("model")]:
             state = main.reducer(state, action)
         result = state
-        expect = {
-            "model": {"active": True},
-            "observation": {"active": False}
-        }
-        self.assertEqual(expect, result)
+        self.assertEqual(result.active.category, "model")
 
     def test_request_started(self):
         result = main.Request("flag").started()

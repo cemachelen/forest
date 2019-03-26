@@ -12,9 +12,10 @@ import numpy as np
 import netCDF4
 import cf_units
 import scipy.ndimage
+import copy
 from threading import Thread
 from tornado import gen
-from functools import partial
+from functools import partial, lru_cache
 from bokeh.document import without_document_lock
 from concurrent.futures import ThreadPoolExecutor
 from collections import OrderedDict
@@ -93,7 +94,7 @@ class Store(object):
     def __init__(self, reducer, state=None):
         self.reducer = reducer
         if state is None:
-            state = {}
+            state = State()
         self.state = state
         self._uid = 0
         self.listeners = OrderedDict()
@@ -116,50 +117,113 @@ class Store(object):
         del self.listeners[uid]
 
 
+class Active(object):
+    def __init__(self):
+        self.category = None
+        self.names = {}
+        self._attrs = ["name", "category"]
+
+    @property
+    def name(self):
+        if self.category is None:
+            return
+        if self.category not in self.names:
+            return
+        return self.names[self.category]
+
+    def __repr__(self):
+        kws = []
+        for attr in self._attrs:
+            eqn = "{}={}".format(attr, getattr(self, attr))
+            kws.append(eqn)
+        return "{}({})".format(
+            self.__class__.__name__,
+            ", ".join(kws))
+
+
+class State(object):
+    def __init__(self):
+        self.active = Active()
+        self.valid_date = None
+        self.listing = False
+        self.found = False
+        self.loading = False
+        self.loaded = None
+        self.files = {}
+        self.found_files = {}
+        self.missing_files = set()
+
+    def __repr__(self):
+        attrs = [
+            "active",
+            "valid_date",
+            "listing",
+            "found",
+            "loading",
+            "loaded",
+            "found_files",
+            "missing_files",
+        ]
+        kws = []
+        for attr in attrs:
+            eqn = "{}={}".format(attr, getattr(self, attr))
+            kws.append(eqn)
+        return "{}({})".format(
+            self.__class__.__name__,
+            ", ".join(kws))
+
+
 def reducer(state, action):
-    state = dict(state)
-    if action["type"] == "SET_TITLE":
-        state["title"] = action["text"]
-    elif action["type"] == "SET_VALID_DATE":
-        state["valid_date"] = action["value"]
-    elif action["type"] == "SET_FORECAST":
-        state["valid_date"] = action["valid_date"]
-        state["length"] = action["length"]
-        state["run_date"] = action["run_date"]
-    elif action["type"] == "SET_NAME":
-        category = action["category"]
-        state[category] = state.get(category, {})
-        state[category]["name"] = action["text"]
-    elif action["type"] == "SET_MODEL_FIELD":
-        state["model"] = state.get("model", {})
-        state["model"]["field"] = action["text"]
-    elif action["type"] in ["ACTIVATE", "DEACTIVATE"]:
-        active = action["type"] == "ACTIVATE"
-        category = action["category"]
-        if category in state:
-            state[category]["active"] = active
-        else:
-            state[category] = {"active": active}
-    elif action["type"] == "REQUEST":
-        flag = action["flag"]
-        if action["status"] == "succeed":
-            state[flag] = False
-            response = action["response"]
-            if flag == "listing":
-                if "files" in state:
-                    state["files"].update(response)
-                else:
-                    state["files"] = dict(response)
+    if isinstance(action, dict):
+        action = PropAction(action)
+    state = copy.copy(state)
+    if action.kind == "SET_VALID_DATE":
+        state.valid_date = action.value
+    elif action.kind == "FILE_NOT_FOUND":
+        state.missing_files.add(action.key)
+        state.found = False
+    elif action.kind == "FILE_FOUND":
+        state.found_files[action.key] = action.value
+        state.found = True
+    elif action.kind == "ACTIVATE":
+        state.active.category = action.category
+    elif action.kind == "SET_NAME":
+        state.active.category = action.category
+        state.active.names[action.category] = action.text
+    elif action.kind == "REQUEST":
+        if action.status == "succeed":
+            setattr(state, action.flag, False)
+            if action.flag == "listing":
+                state.files.update(action.response)
             else:
-                state["loaded"] = response
+                state.loaded = action.response
         else:
-            state[flag] = True
-    elif action["type"] == "FILE_FOUND":
-        state["found"] = action["status"]
+            setattr(state, action.flag, True)
     return state
 
 
+class PropAction(object):
+    def __init__(self, d):
+        d = dict(d)
+        self.kind = d.pop("type")
+        self.__dict__.update(**d)
+
+
 class Action(object):
+    def __init__(self):
+        self._props = [
+            "kind"
+        ]
+
+    def __repr__(self):
+        call_args = ", ".join([
+            "{}={}".format(k, getattr(self, k))
+            for k in self._props
+        ])
+        return "{}({})".format(
+            self.__class__.__name__,
+            call_args)
+
     @staticmethod
     def set_valid_date(date):
         return {
@@ -168,36 +232,12 @@ class Action(object):
         }
 
     @staticmethod
-    def set_forecast(valid_date, length):
-        return {
-            "type": "SET_FORECAST",
-            "valid_date": valid_date,
-            "length": length,
-            "run_date": valid_date - length
-        }
-
-    @staticmethod
-    def set_title(text):
-        return {
-            "type": "SET_TITLE",
-            "text": text
-        }
-
-    @staticmethod
-    def set_model_name(text):
-        return Action.set_name("model", text)
-
-    @staticmethod
     def set_observation_name(text):
         return Action.set_name("observation", text)
 
     @staticmethod
     def set_name(category, text):
-        return {
-            "type": "SET_NAME",
-            "category": category,
-            "text": text
-        }
+        return SetName(category, text)
 
     @staticmethod
     def set_model_field(text):
@@ -219,6 +259,15 @@ class Action(object):
             "type": "DEACTIVATE",
             "category": category
         }
+
+
+class SetName(Action):
+    kind = "SET_NAME"
+
+    def __init__(self, category, text):
+        self.category = category
+        self.text = text
+        self._props = ["category", "text"]
 
 
 class Request(object):
@@ -255,19 +304,24 @@ class Load(Request):
         super().__init__("loading")
 
 
-def file_found(status):
-    return {
-        "type": "FILE_FOUND",
-        "status": status
-    }
+class FileNotFound(Action):
+    kind = "FILE_NOT_FOUND"
+    def __init__(self, key):
+        self.key = key
+        self._props = ["key"]
 
-FILE_FOUND = file_found(True)
-FILE_NOT_FOUND = file_found(False)
+
+class FileFound(Action):
+    kind = "FILE_FOUND"
+    def __init__(self, key, value):
+        self.key = key
+        self.value = value
+        self._props = ["key", "value"]
 
 
 class Application(object):
     def __init__(self, config, directory=None):
-        self.store = Store(reducer, {"model": {"active": True}})
+        self.store = Store(reducer)
         self.unsubscribe = self.store.subscribe(self.state_change)
         self.document = bokeh.plotting.curdoc()
         self.executor = ThreadPoolExecutor(max_workers=2)
@@ -291,7 +345,8 @@ class Application(object):
                 label="Configuration",
                 menu=as_menu(pluck(config.models, "name")))
         self.dropdowns["model"].on_click(select(self.dropdowns["model"]))
-        self.dropdowns["model"].on_click(self.on_click(Action.set_model_name))
+
+        self.dropdowns["model"].on_click(self.set_name("model"))
         self.dropdowns["observation"] = bokeh.models.Dropdown(
                 label="Instrument/satellite",
                 menu=as_menu(pluck(config.observations, "name")))
@@ -334,88 +389,85 @@ class Application(object):
         self.tabs.on_change("active", self.on_tab_change)
         self.loaded_state = {}
 
+    def set_name(self, category):
+        def on_click(value):
+            self.store.dispatch(SetName(category, value))
+        return on_click
+
     def on_tab_change(self, attr, old, new):
         if new == 0:
-            self.store.dispatch(Action.deactivate("observation"))
             self.store.dispatch(Action.activate("model"))
         else:
-            self.store.dispatch(Action.deactivate("model"))
             self.store.dispatch(Action.activate("observation"))
 
     def state_change(self):
         state = self.store.state
-        # print(state)
+        print(state)
 
-        found = state.get("found", False)
-        listing = state.get("listing", False)
-        loading = state.get("loading", False)
-        if listing:
+        if state.listing:
             self.messenger.text = "Searching..."
-        elif loading:
+        elif state.loading:
             self.messenger.text = "Loading..."
-        elif not found:
+        elif not state.found:
             self.messenger.text = "File not found"
         else:
             self.messenger.text = ""
 
-        if not listing:
-            for category in ["model", "observation"]:
-                if category not in state:
-                    continue
-                if not state[category].get("active", False):
-                    continue
-                if "name" not in state[category]:
-                    continue
-                name = state[category]["name"]
-                files = state.get("files", {})
-                pattern = self.patterns[name]
-                if name not in files:
+        if not state.listing:
+            if state.active.name is not None:
+                name = state.active.name
+                pattern = self.patterns[state.active.name]
+                if name not in state.files:
                     self.submit(List(), self.list_files(name, pattern))
 
-        if not loading and not listing:
-            if "valid_date" in state:
-                if "files" in state:
-                    self.load_file(state)
+        # Query disk/cloud for file
+        if not ((state.active.name is None) or (state.valid_date is None)):
+            key = (
+                state.active.name,
+                state.valid_date)
+            if (
+                    (key not in state.missing_files) and
+                    (key not in state.found_files)):
+                response = find_file(
+                    state.files[state.active.name],
+                    state.valid_date)
+                if response is None:
+                    self.store.dispatch(FileNotFound(key))
+                else:
+                    self.store.dispatch(FileFound(key, response))
+
+            if state.found:
+                path, index = state.found_files[key]
+                if not state.loading:
+                    if self.load_needed(state, path, index):
+                        self.submit(Load(), self.load(path, index))
 
         self.render(state)
 
-    def load_file(self, state):
-        name = self.get_active(state)
-        if name is None:
-            return
-        if name not in state["files"]:
-            return
-        paths = state["files"][name]
-        valid_date = state["valid_date"]
-        response = find_file(paths, valid_date)
-        if response is None:
-            if state.get("found", False):
-                self.store.dispatch(FILE_NOT_FOUND)
-        else:
-            path, index = response
-            if self.load_needed(path, index, state):
-                self.submit(Load(), self.load(path, index))
-
     @staticmethod
-    def load_needed(path, index, state):
-        if "loaded" not in state:
+    def load_needed(state, path, index):
+        if state.loaded is None:
             return True
-        if path != state["loaded"]["path"]:
+        if path != state.loaded["path"]:
             return True
-        if index != state["loaded"]["index"]:
+        if index != state.loaded["index"]:
             return True
         return False
 
     def load(self, path, index):
         def task():
-            with netCDF4.Dataset(path) as dataset:
-                data = load_index(dataset, index)
-            return {
-                "path": path,
-                "index": index,
-                "data": data
-            }
+            return self._load(path, index)
         return task
+
+    @lru_cache(maxsize=32)
+    def _load(self, path, index):
+        with netCDF4.Dataset(path) as dataset:
+            data = load_index(dataset, index)
+        return {
+            "path": path,
+            "index": index,
+            "data": data
+        }
 
     @timed
     def list_files(self, key, pattern):
@@ -452,27 +504,16 @@ class Application(object):
 
     def render(self, state):
         self.title.text = self.title_text(state)
-        if "loaded" in state:
-            self.image.source.data = state["loaded"]["data"]
+        if state.loaded is not None:
+            self.image.source.data = state.loaded["data"]
 
     def title_text(self, state):
         parts = []
-        name = self.get_active(state)
-        if name is not None:
-            parts.append(name)
-        if "valid_date" in state:
-            parts.append(state["valid_date"].strftime("%Y-%m-%d %H:%M"))
+        if state.active.name is not None:
+            parts.append(state.active.name)
+        if state.valid_date is not None:
+            parts.append(state.valid_date.strftime("%Y-%m-%d %H:%M"))
         return " ".join(parts)
-
-    @staticmethod
-    def get_active(state):
-        for category in ["model", "observation"]:
-            if category not in state:
-                continue
-            if "name" not in state[category]:
-                continue
-            if state[category].get("active", False):
-                return state[category]["name"]
 
 
 def main():
@@ -533,22 +574,6 @@ def as_menu(items):
     return [(item, item) for item in items]
 
 
-def load_times(dataset):
-    for name in ["time_2", "time"]:
-        if name not in dataset.variables:
-            continue
-        units = dataset.variables[name].units
-        values = dataset.variables[name][:]
-        return netCDF4.num2date(values, units=units)
-
-
-def hours_before(date):
-    def wrapped(path):
-        d = parse_time(path)
-        return (date - d).total_seconds() / (60 * 60)
-    return wrapped
-
-
 @timed
 def find_file(paths, date):
     none_files = [
@@ -564,30 +589,50 @@ def find_file(paths, date):
             key=hours_before(date))
 
     for path in before_files:
-        with netCDF4.Dataset(path) as dataset:
-            values = dataset.variables["time_2_bnds"][:]
-            units = dataset.variables["time_2"].units
-        bounds = netCDF4.num2date(values, units=units)
+        bounds = load_time_bounds(path)
+        if bounds is None:
+            continue
         start, end = np.min(bounds), np.max(bounds)
         if date >= end:
             return
         if start <= date < end:
-            index = np.where(
-                    (bounds[:, 0] <= date) &
-                    (date < bounds[:, 1]))
-            return path, index[0]
+            return path, time_index(bounds, date)
 
     for path in none_files:
-        with netCDF4.Dataset(path) as dataset:
-            values = dataset.variables["time_2_bnds"][:]
-            units = dataset.variables["time_2"].units
-        bounds = netCDF4.num2date(values, units=units)
+        bounds = load_time_bounds(path)
         start, end = np.min(bounds), np.max(bounds)
         if start <= date <= end:
-            index = np.where(
-                    (bounds[:, 0] <= date) &
-                    (date < bounds[:, 1]))
-            return path, index[0]
+            return path, time_index(bounds, date)
+
+
+def time_index(bounds, date):
+    index = np.where(
+            (bounds[:, 0] <= date) &
+            (date <= bounds[:, 1]))
+    return index[0][0]
+
+
+@lru_cache()
+def load_time_bounds(path):
+    bounds = None
+    with netCDF4.Dataset(path) as dataset:
+        for name in ["time_2", "time"]:
+            if name not in dataset.variables:
+                continue
+            if name + "_bnds" not in dataset.variables:
+                continue
+            values = dataset.variables[name + "_bnds"][:]
+            units = dataset.variables[name].units
+            bounds = netCDF4.num2date(values, units=units)
+            break
+    return bounds
+
+
+def hours_before(date):
+    def wrapped(path):
+        d = parse_time(path)
+        return (date - d).total_seconds() / (60 * 60)
+    return wrapped
 
 
 def find_by_date(paths, date):
