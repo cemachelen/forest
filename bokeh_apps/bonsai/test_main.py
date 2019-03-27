@@ -482,33 +482,6 @@ class TestStore(unittest.TestCase):
         self.store.dispatch(action)
         listener.assert_called_once_with()
 
-    def test_debug_keeps_actions_and_intermediate_states(self):
-        self.maxDiff = None
-        date = dt.datetime(2019, 1, 1)
-        actions = [
-            main.SetName("model", "Model"),
-            main.SetValidDate(date)
-        ]
-        store = main.Store(main.reducer, time_travel=True)
-        for action in actions:
-            store.dispatch(action)
-        self.assertEqual(store.actions, actions)
-        expect = [
-            main.State(),
-            main.State(
-                name="Model",
-                names={"model": "Model"},
-                category="model"),
-            main.State(
-                name="Model",
-                names={"model": "Model"},
-                category="model",
-                valid_date=date)
-        ]
-        self.assertEqual(len(expect), len(store.states))
-        for e, r in zip(expect, store.states):
-            self.assertEqual(e, r)
-
 
 class TestReducer(unittest.TestCase):
     def setUp(self):

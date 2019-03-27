@@ -142,19 +142,13 @@ class Dedupe(object):
 
 
 class Store(object):
-    def __init__(self, reducer, state=None, time_travel=False, middlewares=None):
+    def __init__(self, reducer, state=None, middlewares=None):
         self.reducer = reducer
         if state is None:
             state = State()
         self.state = state
         self._uid = 0
         self.listeners = OrderedDict()
-        self.time_travel = time_travel
-        if self.time_travel:
-            self.actions = []
-            self.states = [
-                state
-            ]
         if middlewares is not None:
             self = enhancer(middlewares)(self)
 
@@ -164,9 +158,6 @@ class Store(object):
 
     def dispatch(self, action):
         self.state = self.reducer(self.state, action)
-        if self.time_travel:
-            self.actions.append(action)
-            self.states.append(self.state)
         for listener in self.listeners.values():
             listener()
 
@@ -257,6 +248,8 @@ class State(object):
 
 
 def reducer(state, action):
+    if isinstance(action, dict):
+        action = PropAction(action)
     state = state.copy()
     if action.kind == "SET_VALID_DATE":
         state.valid_date = action.value
