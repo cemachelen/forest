@@ -282,9 +282,13 @@ def reducer(state, action):
 
 class PropAction(object):
     def __init__(self, d):
+        self._args = dict(d)
         d = dict(d)
         self.kind = d.pop("type")
         self.__dict__.update(**d)
+
+    def __repr__(self):
+        return "{}({})".format(self.__class__.__name__, self._args)
 
 
 class Action(object):
@@ -411,11 +415,10 @@ class Application(object):
         self.store = Store(reducer, middlewares=[
             as_action,
             Dedupe("SET_VALID_DATE"),
-            logger
+            self.middleware,
+            logger,
         ])
         self.unsubscribe = self.store.subscribe(self.on_render)
-        self.unsubscribe = self.store.subscribe(self.on_list)
-        self.unsubscribe = self.store.subscribe(self.on_find)
         self.document = bokeh.plotting.curdoc()
         self.executor = ThreadPoolExecutor(max_workers=2)
         self.patterns = file_patterns(
@@ -474,6 +477,38 @@ class Application(object):
         self.tabs.on_change("active", self.on_tab_change)
         self.loaded_state = {}
 
+    def middleware(self, store, store_dispatch):
+        def dispatch(action):
+            store_dispatch(action)
+            state = store.state
+            if action.kind == "SET_NAME":
+                name = action.text
+                if (state.listed is None) or (name not in state.listed):
+                    pattern = self.patterns[name]
+                    self.submit(List(), self.list_files(name, pattern))
+            if state.name is None:
+                return
+            if state.valid_date is None:
+                return
+            if state.name not in state.listed:
+                return
+            paths = state.listed[state.name]
+            key = (state.name, state.valid_date.strftime("%Y%m%dT%H%M%S"))
+            if not (
+                    (key in state.found_files) or
+                    (key in state.missing_files)):
+                response = find_file(paths, state.valid_date)
+                if response is None:
+                    self.store.dispatch(FileNotFound(key))
+                else:
+                    self.store.dispatch(FileFound(key, response))
+            if action.kind in ["FILE_FOUND", "SET_VALID_DATE", "SET_NAME"]:
+                if (key in state.found_files) and not state.loading:
+                    path, index = state.found_files[key]
+                    self.submit(Load(), self.load(path, index))
+
+        return dispatch
+
     def set_name(self, category):
         def on_click(value):
             self.store.dispatch(SetName(category, value))
@@ -486,38 +521,8 @@ class Application(object):
             self.store.dispatch(Action.activate("observation"))
 
     def on_render(self):
+        print("render")
         self.render(self.store.state)
-
-    def on_list(self):
-        state = self.store.state
-        if state.listing:
-            return
-        if state.name is None:
-            return
-        if (state.listed is None) or (state.name not in state.listed):
-            pattern = self.patterns[state.name]
-            self.submit(List(), self.list_files(state.name, pattern))
-
-    def on_find(self):
-        state = self.store.state
-        if state.name is None:
-            return
-        if state.valid_date is None:
-            return
-        if state.name not in state.listed:
-            return
-        paths = state.listed[state.name]
-        date = state.valid_date
-        key = (state.name, state.valid_date.strftime("%Y%m%dT%H%M%S"))
-        if key in state.found_files:
-            return
-        elif key in state.missing_files:
-            return
-        response = find_file(paths, date)
-        if response is None:
-            self.store.dispatch(FileNotFound(key))
-        else:
-            self.store.dispatch(FileFound(key, response))
 
     def render(self, state):
         if state.listing:
@@ -533,16 +538,6 @@ class Application(object):
             self.image.source.data = state.loaded["data"]
         if state.file_not_found:
             self.image.empty()
-
-    @staticmethod
-    def load_needed(state, path, index):
-        if state.loaded is None:
-            return True
-        if path != state.loaded["path"]:
-            return True
-        if index != state.loaded["index"]:
-            return True
-        return False
 
     def load(self, path, index):
         def task():
