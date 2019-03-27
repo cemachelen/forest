@@ -90,8 +90,59 @@ def select(dropdown):
     return on_click
 
 
+def compose(fs):
+    def wrapper(x):
+        for f in reversed(fs):
+            x = f(x)
+        return x
+    return wrapper
+
+
+def enhancer(middlewares):
+    def enhance(store):
+        store._dispatch = store.dispatch
+        chain = [partial(m, store) for m in middlewares]
+        store.dispatch = compose(chain)(store._dispatch)
+        return store
+    return enhance
+
+
+def logger(store, store_dispatch):
+    def dispatch(action):
+        print("logger:", action)
+        store_dispatch(action)
+    return dispatch
+
+
+def as_action(store, store_dispatch):
+    def dispatch(action):
+        if isinstance(action, dict):
+            action = PropAction(action)
+        store_dispatch(action)
+    return dispatch
+
+
+class Dedupe(object):
+    def __init__(self, kind):
+        self.kind = kind
+        self.last_action = None
+
+    def __call__(self, store, store_dispatch):
+        def dispatch(action):
+            if action.kind == self.kind:
+                if self.last_action is None:
+                    self.last_action = action
+                    store_dispatch(action)
+                elif (action.value != self.last_action.value):
+                    self.last_action = action
+                    store_dispatch(action)
+            else:
+                store_dispatch(action)
+        return dispatch
+
+
 class Store(object):
-    def __init__(self, reducer, state=None, time_travel=False):
+    def __init__(self, reducer, state=None, time_travel=False, middlewares=None):
         self.reducer = reducer
         if state is None:
             state = State()
@@ -104,6 +155,8 @@ class Store(object):
             self.states = [
                 state
             ]
+        if middlewares is not None:
+            self = enhancer(middlewares)(self)
 
     def uid(self):
         self._uid = self._uid + 1
@@ -204,8 +257,6 @@ class State(object):
 
 
 def reducer(state, action):
-    if isinstance(action, dict):
-        action = PropAction(action)
     state = state.copy()
     if action.kind == "SET_VALID_DATE":
         state.valid_date = action.value
@@ -364,7 +415,11 @@ class Reset(Action):
 
 class Application(object):
     def __init__(self, config, directory=None):
-        self.store = Store(reducer, time_travel=True)
+        self.store = Store(reducer, middlewares=[
+            as_action,
+            Dedupe("SET_VALID_DATE"),
+            logger
+        ])
         self.unsubscribe = self.store.subscribe(self.on_render)
         self.unsubscribe = self.store.subscribe(self.on_list)
         self.unsubscribe = self.store.subscribe(self.on_find)
@@ -460,7 +515,16 @@ class Application(object):
             return
         paths = state.listed[state.name]
         date = state.valid_date
-        print(find_file(paths, date))
+        key = (state.name, state.valid_date.strftime("%Y%m%dT%H%M%S"))
+        if key in state.found_files:
+            return
+        elif key in state.missing_files:
+            return
+        response = find_file(paths, date)
+        if response is None:
+            self.store.dispatch(FileNotFound(key))
+        else:
+            self.store.dispatch(FileFound(key, response))
 
     def render(self, state):
         if state.listing:
@@ -654,7 +718,6 @@ def load_time_bounds(path):
                 time_dim = dataset.variables[v].dimensions[0]
                 values = dataset.variables[time_dim + "_bnds"][:]
                 units = dataset.variables[time_dim].units
-                print(values, units)
                 bounds = netCDF4.num2date(values, units=units)
                 break
     return bounds
