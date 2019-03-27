@@ -189,7 +189,8 @@ class State(object):
             missing_files=None,
             loading=False,
             loaded=None,
-            listed=None,):
+            listed=None,
+            hours=None):
         self.name = name
         self.names = if_none(names, {})
         self.category = category
@@ -199,8 +200,10 @@ class State(object):
         self.file_not_found = file_not_found
         self.loading = loading
         self.loaded = loaded
+        self.requests = {}
         self.found_files = if_none(found_files, {})
         self.missing_files = if_none(missing_files, set())
+        self.hours = if_none(hours, [])
 
     def copy(self):
         return State(
@@ -214,7 +217,8 @@ class State(object):
             loaded=self.loaded,
             listed=dict(self.listed),
             found_files=dict(self.found_files),
-            missing_files=set(self.missing_files))
+            missing_files=set(self.missing_files),
+            hours=list(self.hours))
 
     def __eq__(self, other):
         return (
@@ -268,15 +272,28 @@ def reducer(state, action):
         state.names[action.category] = action.text
     elif action.kind == "REQUEST":
         if action.status == "succeed":
-            setattr(state, action.flag, False)
             if action.flag == "listing":
+                setattr(state, action.flag, False)
                 state.listed.update(action.response)
-            else:
+            elif action.flag == "loading":
+                setattr(state, action.flag, False)
                 state.loaded = action.response
+            else:
+                state.requests[action.flag] = {
+                    "status": action.status,
+                    "response": action.response
+                }
         else:
-            setattr(state, action.flag, True)
+            if action.flag in ["listing", "loading"]:
+                setattr(state, action.flag, True)
+            else:
+                state.requests[action.flag] = {
+                    "status": action.status
+                }
     elif action.kind == "RESET":
         setattr(state, action.attr, None)
+    elif action.kind == "UPDATE_HOURS":
+        state.hours = action.payload
     return state
 
 
@@ -402,12 +419,21 @@ class FileFound(Action):
         self._props = ["key", "value"]
 
 
-class Reset(Action):
-    kind = "RESET"
+class UpdateHours(Action):
+    def __init__(self, hours):
+        self.kind = "UPDATE_HOURS"
+        self.payload = hours
+        self._props = ["payload"]
 
-    def __init__(self, attr, value=None):
-        self.attr = attr
-        self.value = value
+
+def forward_hours(store, store_dispatch):
+    def dispatch(action):
+        store_dispatch(action)
+        if action.kind == "REQUEST":
+            if action.status == "succeed":
+                if action.flag == "hours":
+                    store_dispatch(UpdateHours(action.response))
+    return dispatch
 
 
 class Application(object):
@@ -416,6 +442,7 @@ class Application(object):
             as_action,
             Dedupe("SET_VALID_DATE"),
             self.middleware,
+            forward_hours,
             logger,
         ])
         self.unsubscribe = self.store.subscribe(self.on_render)
@@ -437,6 +464,8 @@ class Application(object):
         self.messenger = Messenger(self.figures["map"])
         self.image = Image(self.figures["map"])
         self.dropdowns = {}
+        self.dropdowns["hours"] = bokeh.models.Dropdown(
+            label="Hours")
         self.dropdowns["model"] = bokeh.models.Dropdown(
                 label="Configuration",
                 menu=as_menu(pluck(config.models, "name")))
@@ -468,6 +497,7 @@ class Application(object):
         self.tabs = bokeh.models.Tabs(tabs=[
             bokeh.models.Panel(child=bokeh.layouts.column(
                 self.dropdowns["model"],
+                self.dropdowns["hours"],
                 self.dropdowns["field"],
                 overlay_checkboxes,
             ), title="Model"),
@@ -506,6 +536,7 @@ class Application(object):
                 if (key in state.found_files) and not state.loading:
                     path, index = state.found_files[key]
                     self.submit(Load(), self.load(path, index))
+                    self.submit(Request("hours"), self.load_hours(path))
 
         return dispatch
 
@@ -538,6 +569,7 @@ class Application(object):
             self.image.source.data = state.loaded["data"]
         if state.file_not_found:
             self.image.empty()
+        self.dropdowns["hours"].menu = as_menu([str(h) for h in state.hours])
 
     def load(self, path, index):
         def task():
@@ -553,6 +585,20 @@ class Application(object):
             "index": index,
             "data": data
         }
+
+    def load_hours(self, path):
+        def task():
+            with netCDF4.Dataset(path) as dataset:
+                bounds = load_time_bounds(path)
+            labels = []
+            deltas = bounds - bounds[0, 0]
+            for left, right in deltas:
+                left_hrs = left.total_seconds() / (60*60)
+                right_hrs = right.total_seconds() / (60*60)
+                label = "T{} - T{}".format(int(left_hrs), int(right_hrs))
+                labels.append(label)
+            return labels
+        return task
 
     @timed
     def list_files(self, key, pattern):

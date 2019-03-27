@@ -310,20 +310,6 @@ class TestState(unittest.TestCase):
         self.assertEqual(state.category, "model")
         self.assertEqual(state.name, "C")
 
-    def test_reset_loaded(self):
-        action = main.Reset("loaded")
-        self.assertEqual(action.kind, "RESET")
-        self.assertEqual(action.attr, "loaded")
-        self.assertEqual(action.value, None)
-
-    def test_reducer_given_reset_loaded(self):
-        state = main.State()
-        for action in [
-                main.Load().finished("payload"),
-                main.Reset("loaded")]:
-            state = main.reducer(state, action)
-        self.assertEqual(state.loaded, None)
-
 
 class TestFindFileByValidDate(unittest.TestCase):
     def setUp(self):
@@ -583,6 +569,49 @@ class TestAction(unittest.TestCase):
             "flag": "flag",
             "status": "fail"}
         self.assertEqual(expect, result)
+
+
+class TestDisplayHours(unittest.TestCase):
+    def test_update_hours_action(self):
+        hours = [0, 12, 24]
+        action = main.UpdateHours(hours)
+        self.assertEqual(action.kind, "UPDATE_HOURS")
+        self.assertEqual(action.payload, hours)
+
+    def test_reducer_given_update_hours(self):
+        hours = [0, 12, 24, 48]
+        state = main.reducer(main.State(), main.UpdateHours(hours))
+        self.assertEqual(state.hours, hours)
+
+    def test_state_copy_works_correctly(self):
+        hours, name = [2, 3, 4], "A"
+        state = main.State()
+        for action in [
+                main.UpdateHours(hours),
+                main.SetName("model", name)]:
+            state = main.reducer(state, action)
+        self.assertEqual(state.hours, hours)
+        self.assertEqual(state.name, name)
+
+    def test_view_given_hours(self):
+        state = main.State(hours=[12, 24])
+        app = main.Application(main.Config())
+        app.render(state)
+        result = app.dropdowns["hours"].menu
+        expect = [("12", "12"), ("24", "24")]
+        self.assertEqual(expect, result)
+
+    def test_request_hours(self):
+        store = main.Store(main.reducer)
+        store.dispatch(main.Request("hours").started())
+        store.dispatch(main.Request("hours").finished([12, 24]))
+        self.assertEqual(store.state.hours, [])
+        self.assertEqual(store.state.requests, {
+            "hours": {
+                "status": "succeed",
+                "response": [12, 24]
+            }
+        })
 
 
 class TestMostRecent(unittest.TestCase):
