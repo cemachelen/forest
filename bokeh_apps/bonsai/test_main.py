@@ -614,6 +614,31 @@ class TestDisplayHours(unittest.TestCase):
         })
 
 
+class TestEarthNetworks(unittest.TestCase):
+    def setUp(self):
+        self.path = "integrate-earth-networks.txt"
+
+    def tearDown(self):
+        if os.path.exists(self.path):
+            os.remove(self.path)
+
+    def test_integration(self):
+        line = "0,20190328T005600.052,+29.3603000,+007.6370000,-000025503,000,00000,006,001"
+        with open(self.path, "w") as stream:
+            stream.write(line + "\n")
+        config = main.Config(observations=[
+            {
+                "name": "EarthNetworks",
+                "pattern": self.path
+            }
+        ])
+        app = main.Application(config)
+        action = main.SetName("observation", "EarthNetworks")
+        app.store.dispatch(action)
+        print(app.store.state)
+        self.assertTrue(False)
+
+
 class TestMostRecent(unittest.TestCase):
     def test_most_recent(self):
         times = [
