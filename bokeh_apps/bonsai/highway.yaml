@@ -13,3 +13,5 @@ observations:
       pattern: gpm_imerg/gpm_imerg_NRTearly_V05B_*_highway_only.nc
     - name: GPM IMERG late
       pattern: gpm_imerg/gpm_imerg_NRTlate_V05B_*_highway_only.nc
+    - name: EarthNetworks
+      pattern: /data/local/frrn/buckets/highway-external-collab/*/*/englnrt_*.txt
