@@ -177,63 +177,48 @@ def if_none(value, default):
 
 
 class State(object):
-    def __init__(
-            self,
-            name=None,
-            names=None,
-            category=None,
-            valid_date=None,
-            listing=False,
-            file_not_found=False,
-            found_files=None,
-            missing_files=None,
-            loading=False,
-            loaded=None,
-            listed=None,
-            hours=None):
-        self.name = name
-        self.names = if_none(names, {})
-        self.category = category
-        self.valid_date = valid_date
-        self.listing = listing
-        self.listed = if_none(listed, {})
-        self.file_not_found = file_not_found
-        self.loading = loading
-        self.loaded = loaded
-        self.requests = {}
-        self.found_files = if_none(found_files, {})
-        self.missing_files = if_none(missing_files, set())
-        self.hours = if_none(hours, [])
+    _props = [
+        ("name", None),
+        ("names", dict),
+        ("category", None),
+        ("valid_date", None),
+        ("listing", bool),
+        ("file_not_found", bool),
+        ("found_files", dict),
+        ("missing_files", set),
+        ("loading", bool),
+        ("loaded", None),
+        ("listed", dict),
+        ("hours", list),
+        ("requests", dict),
+        ("split_screen", bool)
+    ]
+
+    def __init__(self, **kwargs):
+        for attr, dtype in self._props:
+            if attr in kwargs:
+                value = kwargs[attr]
+            else:
+                if dtype is None:
+                    value = None
+                else:
+                    value = dtype()
+            setattr(self, attr, value)
 
     def copy(self):
-        return State(
-            name=self.name,
-            names=dict(self.names),
-            category=self.category,
-            valid_date=self.valid_date,
-            file_not_found=self.file_not_found,
-            listing=self.listing,
-            loading=self.loading,
-            loaded=self.loaded,
-            listed=dict(self.listed),
-            found_files=dict(self.found_files),
-            missing_files=set(self.missing_files),
-            hours=list(self.hours))
+        kwargs = {}
+        for attr, dtype in self._props:
+            if dtype is None:
+                kwargs[attr] = getattr(self, attr)
+            else:
+                kwargs[attr] = dtype(getattr(self, attr))
+        return State(**kwargs)
 
     def __eq__(self, other):
-        return (
-            (self.name == other.name) and
-            (self.names == other.names) and
-            (self.category == other.category) and
-            (self.valid_date == other.valid_date) and
-            (self.file_not_found == other.file_not_found) and
-            (self.listing == other.listing) and
-            (self.loading == other.loading) and
-            (self.loaded == other.loaded) and
-            (self.listed == other.listed) and
-            (self.found_files == other.found_files) and
-            (self.missing_files == other.missing_files)
-        )
+        return all([
+            getattr(self, attr) == getattr(other, attr)
+            for attr, _ in self._props
+        ])
 
     def __repr__(self):
         attrs = [
@@ -294,6 +279,9 @@ def reducer(state, action):
         setattr(state, action.attr, None)
     elif action.kind == "UPDATE_HOURS":
         state.hours = action.payload
+    elif action.kind == "TOGGLE":
+        value = not getattr(state, action.attr)
+        setattr(state, action.attr, value)
     return state
 
 
@@ -426,6 +414,12 @@ class UpdateHours(Action):
         self._props = ["payload"]
 
 
+class Toggle(object):
+    kind = "TOGGLE"
+    def __init__(self, attr):
+        self.attr = attr
+
+
 def forward_hours(store, store_dispatch):
     def dispatch(action):
         store_dispatch(action)
@@ -451,18 +445,59 @@ class Application(object):
         self.patterns = file_patterns(
             config.models + config.observations,
             directory)
-        self.figures = {
-            "map": full_screen_figure(
-                lon_range=config.lon_range,
-                lat_range=config.lat_range)
+        def on_click(action):
+            self.store.dispatch(action)
+
+        # Split screen design
+        self.buttons = {
+            "split_screen": bokeh.models.Button(label="Split screen")
         }
+        self.buttons["split_screen"].on_click(
+            partial(on_click, Toggle("split_screen")))
+
+        tile = bokeh.models.WMTSTileSource(
+            url='https://c.tile.openstreetmap.org/{Z}/{X}/{Y}.png',
+            attribution="&copy; <a href='http://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors"
+        )
+        x_range, y_range = transform(
+            config.lon_range,
+            config.lat_range,
+            cartopy.crs.PlateCarree(),
+            cartopy.crs.Mercator.GOOGLE)
+        first = bokeh.plotting.figure(
+            x_range=x_range,
+            y_range=y_range,
+            x_axis_type="mercator",
+            y_axis_type="mercator",
+            active_scroll="wheel_zoom")
+        second = bokeh.plotting.figure(
+            active_scroll="wheel_zoom",
+            x_axis_type="mercator",
+            y_axis_type="mercator",
+            x_range=first.x_range,
+            y_range=first.y_range)
+        second.yaxis.visible = False
+        self.figures = [
+            first,
+            second
+        ]
+        for f in self.figures:
+            f.axis.visible = False
+            f.toolbar.logo = None
+            f.toolbar_location = None
+            f.min_border = 0
+            f.add_tile(tile)
+        self.figure_layout = bokeh.layouts.row(
+            *self.figures, sizing_mode="stretch_both")
+        self.figure_layout.children = [self.figures[0]]
+
         self.toolbar_box = bokeh.models.ToolbarBox(
-            toolbar=self.figures["map"].toolbar,
+            toolbar=self.figures[0].toolbar,
             toolbar_location="below")
 
-        self.title = Title(self.figures["map"])
-        self.messenger = Messenger(self.figures["map"])
-        self.image = Image(self.figures["map"])
+        self.title = Title(self.figures[0])
+        self.messenger = Messenger(self.figures[0])
+        self.image = Image(self.figures[0])
         self.dropdowns = {}
         self.dropdowns["hours"] = bokeh.models.Dropdown(
             label="Hours")
@@ -571,6 +606,11 @@ class Application(object):
             self.image.empty()
         self.dropdowns["hours"].menu = as_menu([str(h) for h in state.hours])
 
+        if state.split_screen:
+            self.figure_layout.children = self.figures
+        else:
+            self.figure_layout.children = [self.figures[0]]
+
     def load(self, path, index):
         def task():
             return self._load(path, index)
@@ -650,7 +690,6 @@ def main():
         config = Config.load(env.config_file)
 
     application = Application(config, env.directory)
-    figure = application.figures["map"]
 
     level_selector = LevelSelector()
 
@@ -674,6 +713,7 @@ def main():
         bokeh.layouts.column(plus))
 
     controls = bokeh.layouts.column(
+        application.buttons["split_screen"],
         datetime_picker.date_picker,
         button_row,
         datetime_picker.hour_slider,
@@ -685,7 +725,7 @@ def main():
         name="height")
 
     document = bokeh.plotting.curdoc()
-    document.add_root(figure)
+    document.add_root(application.figure_layout)
     document.add_root(application.toolbar_box)
     document.add_root(controls)
     document.add_root(height_controls)
@@ -969,26 +1009,6 @@ class Title(object):
 def full_screen_figure(
         lon_range=(-180, 180),
         lat_range=(-80, 80)):
-    x_range, y_range = transform(
-        lon_range,
-        lat_range,
-        cartopy.crs.PlateCarree(),
-        cartopy.crs.Mercator.GOOGLE)
-    figure = bokeh.plotting.figure(
-        sizing_mode="stretch_both",
-        x_range=x_range,
-        y_range=y_range,
-        x_axis_type="mercator",
-        y_axis_type="mercator",
-        active_scroll="wheel_zoom")
-    figure.toolbar_location = None
-    figure.axis.visible = False
-    figure.min_border = 0
-    tile = bokeh.models.WMTSTileSource(
-        url='https://c.tile.openstreetmap.org/{Z}/{X}/{Y}.png',
-        attribution="&copy; <a href='http://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors"
-    )
-    figure.add_tile(tile)
     return figure
 
 
