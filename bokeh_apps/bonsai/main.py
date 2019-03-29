@@ -457,10 +457,11 @@ class Application(object):
         self.patterns = file_patterns(
             config.models + config.observations,
             directory)
+
+        # Split screen design
         def on_click(action):
             self.store.dispatch(action)
 
-        # Split screen design
         self.buttons = {
             "split_screen": bokeh.models.Button(label="Split screen")
         }
@@ -506,6 +507,26 @@ class Application(object):
         self.toolbar_box = bokeh.models.ToolbarBox(
             toolbar=self.figures[0].toolbar,
             toolbar_location="below")
+
+        # ColumnDataSources
+        x, y = transform(
+            [0, 10, 20],
+            [0, 10, 20],
+            cartopy.crs.PlateCarree(),
+            cartopy.crs.Mercator.GOOGLE)
+        self.sources = {
+            "circle": bokeh.models.ColumnDataSource({
+                "x": x,
+                "y": y
+            })
+        }
+        self.renderers = {
+            "circle": self.figures[1].circle(
+                x="x",
+                y="y",
+                source=self.sources["circle"])
+        }
+
 
         self.title = Title(self.figures[0])
         self.messenger = Messenger(self.figures[0])
@@ -622,6 +643,9 @@ class Application(object):
             self.figure_layout.children = self.figures
         else:
             self.figure_layout.children = [self.figures[0]]
+
+        for key, data in state.sources.items():
+            self.sources[key].data = data
 
     def load(self, path, index):
         def task():

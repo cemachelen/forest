@@ -648,6 +648,15 @@ class TestEarthNetworks(unittest.TestCase):
         expect = {"image": "x", "circle": "y"}
         self.assertEqual(expect, result)
 
+    def test_render_given_update(self):
+        data = {"x": [0, 1, 2], "y": [0, 1, 2]}
+        state = main.State(sources={"circle": data})
+        app = main.Application(main.Config())
+        app.render(state)
+        result = app.sources["circle"].data
+        expect = data
+        self.assertEqual(expect, result)
+
 
 class TestMostRecent(unittest.TestCase):
     def test_most_recent(self):
