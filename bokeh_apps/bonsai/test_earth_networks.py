@@ -1,32 +1,8 @@
 import unittest
 import os
+import earth_networks
 import datetime as dt
-import dateutil.parser
 import pandas as pd
-
-
-def read_earth_networks(csv_files):
-    if isinstance(csv_files, str):
-        csv_files = [csv_files]
-    frames = []
-    for csv_file in csv_files:
-        frame = pd.read_csv(
-            csv_file,
-            parse_dates=[1],
-            converters={0: flash_type},
-            usecols=[0, 1, 2, 3],
-            names=["flash_type", "date", "longitude", "latitude"],
-            header=None)
-        frames.append(frame)
-    return pd.concat(frames, ignore_index=True)
-
-
-def flash_type(value):
-    return {
-        "0": "CG",
-        "1": "IC",
-        "9": "Keep alive"
-    }.get(value, value)
 
 
 class TestEarthNetworks(unittest.TestCase):
@@ -46,7 +22,7 @@ class TestEarthNetworks(unittest.TestCase):
         entry = "0,20190328T005600.052,+29.3603000,+007.6370000,-000025503,000,00000,006,001"
         with open(path, "w") as stream:
             stream.write(entry + "\n")
-        result = read_earth_networks(path)
+        result = earth_networks.read_earth_networks(path)
         print(result)
         expect = pd.DataFrame({
             "flash_type": ["CG"],
@@ -65,7 +41,7 @@ class TestEarthNetworks(unittest.TestCase):
         for path in self.paths:
             with open(path, "w") as stream:
                 stream.write("\n".join(entries) + "\n")
-        result = read_earth_networks(self.paths)
+        result = earth_networks.read_earth_networks(self.paths)
         expect = pd.DataFrame({
             "flash_type": 2 * ["CG", "IC", "Keep alive"],
             "date": 6 * [self.date],

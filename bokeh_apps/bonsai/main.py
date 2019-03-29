@@ -191,7 +191,8 @@ class State(object):
         ("listed", dict),
         ("hours", list),
         ("requests", dict),
-        ("split_screen", bool)
+        ("split_screen", bool),
+        ("sources", dict)
     ]
 
     def __init__(self, **kwargs):
@@ -277,6 +278,8 @@ def reducer(state, action):
                 }
     elif action.kind == "RESET":
         setattr(state, action.attr, None)
+    elif action.kind == "UPDATE":
+        getattr(state, action.attr).update(action.value)
     elif action.kind == "UPDATE_HOURS":
         state.hours = action.payload
     elif action.kind == "TOGGLE":
@@ -405,6 +408,15 @@ class FileFound(Action):
         self.key = key
         self.value = value
         self._props = ["key", "value"]
+
+
+class Update(Action):
+    kind = "UPDATE"
+
+    def __init__(self, attr, value):
+        self.attr = attr
+        self.value = value
+        self._props = ["attr", "value"]
 
 
 class UpdateHours(Action):

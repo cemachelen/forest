@@ -622,6 +622,7 @@ class TestEarthNetworks(unittest.TestCase):
         if os.path.exists(self.path):
             os.remove(self.path)
 
+    @unittest.skip("simplifying application state")
     def test_integration(self):
         line = "0,20190328T005600.052,+29.3603000,+007.6370000,-000025503,000,00000,006,001"
         with open(self.path, "w") as stream:
@@ -635,8 +636,17 @@ class TestEarthNetworks(unittest.TestCase):
         app = main.Application(config)
         action = main.SetName("observation", "EarthNetworks")
         app.store.dispatch(action)
-        print(app.store.state)
         self.assertTrue(False)
+
+    def test_update_source_action(self):
+        state = main.State()
+        for action in [
+                main.Update("sources", {"image": "x"}),
+                main.Update("sources", {"circle": "y"})]:
+            state = main.reducer(state, action)
+        result = state.sources
+        expect = {"image": "x", "circle": "y"}
+        self.assertEqual(expect, result)
 
 
 class TestMostRecent(unittest.TestCase):
