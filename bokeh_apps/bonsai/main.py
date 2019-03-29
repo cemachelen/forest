@@ -441,6 +441,33 @@ def forward_hours(store, store_dispatch):
                     store_dispatch(UpdateHours(action.response))
     return dispatch
 
+def middleware(f):
+    def outer(store, next_dispatch):
+        def inner(action):
+            return f(action, store, next_dispatch)
+        return inner
+    return outer
+
+@middleware
+def earth_networks_dispatch(action, store, next_dispatch):
+    next_dispatch(action)
+    if (action.kind == "SET_NAME") and (action.text == "EarthNetworks"):
+        data = earth_networks_data()
+        store.dispatch(Update("sources", {"circle": data}))
+
+
+def earth_networks_data():
+    n = 100
+    x, y = transform(
+        np.linspace(0, 10, n) * np.random.rand(n),
+        np.linspace(0, 10, n),
+        cartopy.crs.PlateCarree(),
+        cartopy.crs.Mercator.GOOGLE)
+    return {
+        "x": x,
+        "y": y
+    }
+
 
 class Application(object):
     def __init__(self, config, directory=None):
@@ -449,6 +476,7 @@ class Application(object):
             Dedupe("SET_VALID_DATE"),
             self.middleware,
             forward_hours,
+            earth_networks_dispatch,
             logger,
         ])
         self.unsubscribe = self.store.subscribe(self.on_render)
