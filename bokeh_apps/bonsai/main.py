@@ -26,6 +26,7 @@ sys.path.insert(0, os.path.dirname(__file__))
 import rx
 import ui
 import bonsai
+import earth_networks
 from util import timed
 
 
@@ -457,10 +458,11 @@ def earth_networks_dispatch(action, store, next_dispatch):
 
 
 def earth_networks_data():
-    n = 100
+    csv_files = glob.glob("2019/2019*/*.txt")
+    frame = earth_networks.read(csv_files)
     x, y = transform(
-        np.linspace(0, 10, n) * np.random.rand(n),
-        np.linspace(0, 10, n),
+        frame.longitude,
+        frame.latitude,
         cartopy.crs.PlateCarree(),
         cartopy.crs.Mercator.GOOGLE)
     return {
@@ -537,15 +539,10 @@ class Application(object):
             toolbar_location="below")
 
         # ColumnDataSources
-        x, y = transform(
-            [0, 10, 20],
-            [0, 10, 20],
-            cartopy.crs.PlateCarree(),
-            cartopy.crs.Mercator.GOOGLE)
         self.sources = {
             "circle": bokeh.models.ColumnDataSource({
-                "x": x,
-                "y": y
+                "x": [],
+                "y": []
             })
         }
         self.renderers = {

@@ -1,7 +1,7 @@
 import pandas as pd
 
 
-def read_earth_networks(csv_files):
+def read(csv_files):
     if isinstance(csv_files, str):
         csv_files = [csv_files]
     frames = []

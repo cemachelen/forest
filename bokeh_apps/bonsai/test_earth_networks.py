@@ -22,7 +22,7 @@ class TestEarthNetworks(unittest.TestCase):
         entry = "0,20190328T005600.052,+29.3603000,+007.6370000,-000025503,000,00000,006,001"
         with open(path, "w") as stream:
             stream.write(entry + "\n")
-        result = earth_networks.read_earth_networks(path)
+        result = earth_networks.read(path)
         print(result)
         expect = pd.DataFrame({
             "flash_type": ["CG"],
@@ -41,7 +41,7 @@ class TestEarthNetworks(unittest.TestCase):
         for path in self.paths:
             with open(path, "w") as stream:
                 stream.write("\n".join(entries) + "\n")
-        result = earth_networks.read_earth_networks(self.paths)
+        result = earth_networks.read(self.paths)
         expect = pd.DataFrame({
             "flash_type": 2 * ["CG", "IC", "Keep alive"],
             "date": 6 * [self.date],
