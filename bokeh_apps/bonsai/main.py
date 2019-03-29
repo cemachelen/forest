@@ -465,9 +465,11 @@ def earth_networks_data():
         frame.latitude,
         cartopy.crs.PlateCarree(),
         cartopy.crs.Mercator.GOOGLE)
+    t = (dt.datetime.now() - frame.date).total_seconds()
     return {
         "x": x,
-        "y": y
+        "y": y,
+        "c": t
     }
 
 
@@ -542,15 +544,29 @@ class Application(object):
         self.sources = {
             "circle": bokeh.models.ColumnDataSource({
                 "x": [],
-                "y": []
+                "y": [],
+                "c": []
             })
         }
+        color_mapper = bokeh.models.LinearColorMapper(
+                palette=bokeh.palettes.Plasma[256])
         self.renderers = {
             "circle": self.figures[1].circle(
                 x="x",
                 y="y",
-                source=self.sources["circle"])
+                source=self.sources["circle"],
+                fill_color={"field": "c", "transform": color_mapper},
+                line_color={"field": "c", "transform": color_mapper})
         }
+        colorbar = bokeh.models.ColorBar(
+            title="Time since last strike",
+            color_mapper=color_mapper,
+            orientation="horizontal",
+            background_fill_alpha=0.,
+            location="bottom_center",
+            major_tick_line_color="black",
+            bar_line_color="black")
+        self.figures[1].add_layout(colorbar, 'center')
 
 
         self.title = Title(self.figures[0])
@@ -596,7 +612,11 @@ class Application(object):
             ), title="Model"),
             bokeh.models.Panel(child=bokeh.layouts.column(
                 self.dropdowns["observation"],
-            ), title="Observation")])
+            ), title="Obs."),
+            bokeh.models.Panel(child=bokeh.layouts.column(
+                bokeh.models.Button(label="RDT")
+                ), title="Nowcasting")
+            ])
         self.tabs.on_change("active", self.on_tab_change)
         self.loaded_state = {}
 
@@ -928,7 +948,7 @@ class Image(object):
             source=self.source,
             color_mapper=color_mapper)
         colorbar = bokeh.models.ColorBar(
-            title="Preciptation rate (mm/h)",
+            title="Precipitation rate (mm/h)",
             color_mapper=color_mapper,
             orientation="horizontal",
             background_fill_alpha=0.,
