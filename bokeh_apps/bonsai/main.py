@@ -465,11 +465,10 @@ def earth_networks_data():
         frame.latitude,
         cartopy.crs.PlateCarree(),
         cartopy.crs.Mercator.GOOGLE)
-    t = (dt.datetime.now() - frame.date).total_seconds()
     return {
         "x": x,
         "y": y,
-        "c": t
+        "c": frame.date
     }
 
 
@@ -499,6 +498,7 @@ class Application(object):
         }
         self.buttons["split_screen"].on_click(
             partial(on_click, Toggle("split_screen")))
+        self.glyphs = []
 
         tile = bokeh.models.WMTSTileSource(
             url='https://c.tile.openstreetmap.org/{Z}/{X}/{Y}.png',
@@ -566,6 +566,7 @@ class Application(object):
             location="bottom_center",
             major_tick_line_color="black",
             bar_line_color="black")
+
         self.figures[1].add_layout(colorbar, 'center')
 
 
@@ -581,11 +582,9 @@ class Application(object):
         self.dropdowns["model"].on_click(select(self.dropdowns["model"]))
 
         self.dropdowns["model"].on_click(self.set_name("model"))
-        self.dropdowns["observation"] = bokeh.models.Dropdown(
-                label="Instrument/satellite",
+        obs_panel = ObservationPanel(
                 menu=as_menu(pluck(config.observations, "name")))
-        self.dropdowns["observation"].on_click(select(self.dropdowns["observation"]))
-        self.dropdowns["observation"].on_click(
+        obs_panel.dropdowns[0].on_click(
             self.on_click(Action.set_observation_name))
         self.dropdowns["field"] = bokeh.models.Dropdown(
             label="Field",
@@ -610,9 +609,8 @@ class Application(object):
                 self.dropdowns["field"],
                 overlay_checkboxes,
             ), title="Model"),
-            bokeh.models.Panel(child=bokeh.layouts.column(
-                self.dropdowns["observation"],
-            ), title="Obs."),
+            bokeh.models.Panel(child=obs_panel.column,
+                title="Obs."),
             bokeh.models.Panel(child=bokeh.layouts.column(
                 bokeh.models.Button(label="RDT")
                 ), title="Nowcasting")
@@ -761,6 +759,39 @@ class Application(object):
         if state.valid_date is not None:
             parts.append(state.valid_date.strftime("%Y-%m-%d %H:%M"))
         return " ".join(parts)
+
+
+class ObservationPanel(object):
+    def __init__(self, menu):
+        self.rows = []
+        self.dropdowns = []
+        self.menu = menu
+        add = bokeh.models.Button(label="Add", width=50)
+        remove = bokeh.models.Button(label="Remove", width=50)
+        self.column = bokeh.layouts.column(
+            bokeh.layouts.row(add, remove)
+        )
+        self.add_row()
+        add.on_click(self.add_row)
+        remove.on_click(self.remove_row)
+
+    def add_row(self):
+        dropdown = bokeh.models.Dropdown(
+                label="Instrument/satellite",
+                menu=self.menu,
+                width=150)
+        dropdown.on_click(select(dropdown))
+        self.dropdowns.append(dropdown)
+        radio_button_group = bokeh.models.RadioButtonGroup(
+                labels=["L", "R"])
+        row = bokeh.layouts.row(
+            dropdown,
+            radio_button_group)
+        self.column.children.insert(-1, row)
+
+    def remove_row(self):
+        if len(self.column.children) > 2:
+            self.column.children.pop(-2)
 
 
 def main():

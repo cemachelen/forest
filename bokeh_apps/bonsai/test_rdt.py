@@ -9,11 +9,10 @@ class TestRDT(unittest.TestCase):
     def setUp(self):
         self.path = "samples/RDT_features_eastafrica_201903281445.json"
 
+    @unittest.skip("implementing double figure")
     def test_load(self):
         with open(self.path) as stream:
             data = json.load(stream)
-        print(data.keys())
-        self.assertTrue(False)
 
     def test_plotting_rdt_geo_json(self):
         figure = bokeh.plotting.figure()
