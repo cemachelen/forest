@@ -471,11 +471,11 @@ def earth_networks_dispatch(action, store, next_dispatch):
     next_dispatch(action)
     if (action.kind == "SET_NAME") and (action.text == "EarthNetworks"):
         data = earth_networks_data()
-        store.dispatch(Update("sources", {"circle": data}))
+        store.dispatch(Assign("sources", 0, data))
 
 
 def earth_networks_data():
-    csv_files = glob.glob("2019/2019*/*.txt")
+    csv_files = glob.glob("/data/local/frrn/buckets/highway-external-collab/2019/2019*/*.txt")
     frame = earth_networks.read(csv_files)
     x, y = web_mercator(frame.longitude, frame.latitude)
     return {
@@ -610,6 +610,16 @@ class Application(object):
                 menu=as_menu(pluck(config.observations, "name")))
         obs_panel.dropdowns[0].on_click(
             self.on_click(Action.set_observation_name))
+
+        def on_change(attr, old, new):
+            if new == 0:
+                visible = "left"
+            else:
+                visible = "right"
+            self.store.dispatch(Assign("sides", 0, visible))
+
+        obs_panel.groups[0].on_change("active", on_change)
+
         self.dropdowns["field"] = bokeh.models.Dropdown(
             label="Field",
             menu=[
@@ -796,6 +806,7 @@ class ObservationPanel(object):
     def __init__(self, menu):
         self.rows = []
         self.dropdowns = []
+        self.groups = []
         self.menu = menu
         add = bokeh.models.Button(label="Add", width=50)
         remove = bokeh.models.Button(label="Remove", width=50)
@@ -813,11 +824,10 @@ class ObservationPanel(object):
                 width=150)
         dropdown.on_click(select(dropdown))
         self.dropdowns.append(dropdown)
-        radio_button_group = bokeh.models.RadioButtonGroup(
+        group = bokeh.models.RadioButtonGroup(
                 labels=["L", "R"])
-        row = bokeh.layouts.row(
-            dropdown,
-            radio_button_group)
+        self.groups.append(group)
+        row = bokeh.layouts.row(dropdown, group)
         self.column.children.insert(-1, row)
 
     def remove_row(self):
