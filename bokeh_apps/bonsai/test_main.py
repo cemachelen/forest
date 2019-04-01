@@ -641,19 +641,22 @@ class TestEarthNetworks(unittest.TestCase):
     def test_update_source_action(self):
         state = main.State()
         for action in [
-                main.Update("sources", {"image": "x"}),
-                main.Update("sources", {"circle": "y"})]:
+                main.Assign("sources", 0, {"image": "x"}),
+                main.Assign("sources", 1, {"circle": "y"})]:
             state = main.reducer(state, action)
         result = state.sources
-        expect = {"image": "x", "circle": "y"}
+        expect = [
+            {"image": "x"},
+            {"circle": "y"}
+        ]
         self.assertEqual(expect, result)
 
     def test_render_given_update(self):
         data = {"x": [0, 1, 2], "y": [0, 1, 2]}
-        state = main.State(sources={"circle": data})
+        state = main.State(sources=[data])
         app = main.Application(main.Config())
         app.render(state)
-        result = app.sources["circle"].data
+        result = app.sources[0].data
         expect = data
         self.assertEqual(expect, result)
 

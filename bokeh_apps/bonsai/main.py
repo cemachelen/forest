@@ -193,7 +193,8 @@ class State(object):
         ("hours", list),
         ("requests", dict),
         ("split_screen", bool),
-        ("sources", dict)
+        ("sources", list),
+        ("sides", list)
     ]
 
     def __init__(self, **kwargs):
@@ -281,6 +282,12 @@ def reducer(state, action):
         setattr(state, action.attr, None)
     elif action.kind == "UPDATE":
         getattr(state, action.attr).update(action.value)
+    elif action.kind == "ASSIGN":
+        items = getattr(state, action.attr)
+        if action.index >= len(items):
+            items.append(action.value)
+        else:
+            items[action.index] = action.value
     elif action.kind == "UPDATE_HOURS":
         state.hours = action.payload
     elif action.kind == "TOGGLE":
@@ -420,6 +427,16 @@ class Update(Action):
         self._props = ["attr", "value"]
 
 
+class Assign(Action):
+    kind = "ASSIGN"
+
+    def __init__(self, attr, index, value):
+        self.attr = attr
+        self.index = index
+        self.value = value
+        self._props = ["attr", "index", "value"]
+
+
 class UpdateHours(Action):
     def __init__(self, hours):
         self.kind = "UPDATE_HOURS"
@@ -460,11 +477,7 @@ def earth_networks_dispatch(action, store, next_dispatch):
 def earth_networks_data():
     csv_files = glob.glob("2019/2019*/*.txt")
     frame = earth_networks.read(csv_files)
-    x, y = transform(
-        frame.longitude,
-        frame.latitude,
-        cartopy.crs.PlateCarree(),
-        cartopy.crs.Mercator.GOOGLE)
+    x, y = web_mercator(frame.longitude, frame.latitude)
     return {
         "x": x,
         "y": y,
@@ -504,11 +517,9 @@ class Application(object):
             url='https://c.tile.openstreetmap.org/{Z}/{X}/{Y}.png',
             attribution="&copy; <a href='http://www.openstreetmap.org/copyright'>OpenStreetMap</a> contributors"
         )
-        x_range, y_range = transform(
+        x_range, y_range = web_mercator(
             config.lon_range,
-            config.lat_range,
-            cartopy.crs.PlateCarree(),
-            cartopy.crs.Mercator.GOOGLE)
+            config.lat_range)
         first = bokeh.plotting.figure(
             x_range=x_range,
             y_range=y_range,
@@ -541,23 +552,36 @@ class Application(object):
             toolbar_location="below")
 
         # ColumnDataSources
-        self.sources = {
-            "circle": bokeh.models.ColumnDataSource({
+        self.sources = [
+            bokeh.models.ColumnDataSource({
                 "x": [],
                 "y": [],
                 "c": []
             })
-        }
+        ]
         color_mapper = bokeh.models.LinearColorMapper(
                 palette=bokeh.palettes.Plasma[256])
-        self.renderers = {
-            "circle": self.figures[1].circle(
-                x="x",
-                y="y",
-                source=self.sources["circle"],
-                fill_color={"field": "c", "transform": color_mapper},
-                line_color={"field": "c", "transform": color_mapper})
-        }
+        left, right = self.figures
+        self.renderers = [
+            {
+                "left": [
+                    left.circle(
+                        x="x",
+                        y="y",
+                        source=self.sources[0],
+                        fill_color={"field": "c", "transform": color_mapper},
+                        line_color={"field": "c", "transform": color_mapper})
+                ],
+                "right": [
+                    right.circle(
+                        x="x",
+                        y="y",
+                        source=self.sources[0],
+                        fill_color={"field": "c", "transform": color_mapper},
+                        line_color={"field": "c", "transform": color_mapper})
+                ]
+            }
+        ]
         colorbar = bokeh.models.ColorBar(
             title="Time since last strike",
             color_mapper=color_mapper,
@@ -687,8 +711,15 @@ class Application(object):
         else:
             self.figure_layout.children = [self.figures[0]]
 
-        for key, data in state.sources.items():
-            self.sources[key].data = data
+        for visible, renderer in zip(state.sides, self.renderers):
+            hidden = {"left": "right", "right": "left"}[visible]
+            for g in renderer[visible]:
+                g.visible = True
+            for g in renderer[hidden]:
+                g.visible = False
+
+        for i, data in enumerate(state.sources):
+            self.sources[i].data = data
 
     def load(self, path, index):
         def task():
@@ -1015,16 +1046,8 @@ def load_index(dataset, index):
         values = values
     else:
         values = convert_units(values, var.units, "kg m-2 hour-1")
-    gx, _ = transform(
-        lons,
-        np.zeros(len(lons), dtype="d"),
-        cartopy.crs.PlateCarree(),
-        cartopy.crs.Mercator.GOOGLE)
-    _, gy = transform(
-        np.zeros(len(lats), dtype="d"),
-        lats,
-        cartopy.crs.PlateCarree(),
-        cartopy.crs.Mercator.GOOGLE)
+    gx, _ = web_mercator(lons, np.zeros(len(lons), dtype="d"))
+    _, gy = web_mercator(np.zeros(len(lats), dtype="d"), lats)
     values = stretch_y(gy)(values)
     image = np.ma.masked_array(values, values < 0.1)
     x = gx.min()
@@ -1122,6 +1145,14 @@ def full_screen_figure(
         lon_range=(-180, 180),
         lat_range=(-80, 80)):
     return figure
+
+
+def web_mercator(lon, lat):
+    return transform(
+        lon,
+        lat,
+        cartopy.crs.PlateCarree(),
+        cartopy.crs.Mercator.GOOGLE)
 
 
 def transform(x, y, src_crs, dst_crs):

@@ -27,6 +27,12 @@ class State(object):
             other = State(**other)
         return self.kwargs == other.kwargs
 
+    def __repr__(self):
+        content = ", ".join([
+            "{}={}".format(k, v) for k, v in sorted(self.kwargs.items())
+        ])
+        return "{}({})".format(self.__class__.__name__, content)
+
 
 def reducer(state, action):
     if isinstance(state, dict):
@@ -34,8 +40,11 @@ def reducer(state, action):
     state = state.copy()
     if action.kind == "SET_SIDE":
         if not hasattr(state, "sides"):
-            state.sides = {}
-        state.sides[action.key] = action.value
+            state.sides = []
+        if len(state.sides) > action.key:
+            state.sides[action.key] = action.value
+        else:
+            state.sides.append(action.value)
     return state
 
 
@@ -62,18 +71,14 @@ class TestSplitScreen(unittest.TestCase):
         action = SetSide(0, "left")
         result = reducer({}, action)
         expect = {
-            "sides": {
-                0: "left"
-            }
+            "sides": ["left"]
         }
         self.assertEqual(expect, result)
 
     def test_split_screen_hides_glyphs_on_first_figure(self):
         state = State(
                 split_screen=True,
-                sides={
-                    "GPM early": "left"
-                },
+                sides=["left"],
                 name=None,
                 valid_date=None,
                 file_not_found=False,
