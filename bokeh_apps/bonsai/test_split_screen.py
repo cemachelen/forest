@@ -75,6 +75,7 @@ class TestSplitScreen(unittest.TestCase):
         }
         self.assertEqual(expect, result)
 
+    @unittest.skip("consider deleting")
     def test_split_screen_hides_glyphs_on_first_figure(self):
         state = State(
                 split_screen=True,

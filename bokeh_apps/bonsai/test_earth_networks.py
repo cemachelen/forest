@@ -29,7 +29,7 @@ class TestEarthNetworks(unittest.TestCase):
             "date": [self.date],
             "longitude": [29.3603],
             "latitude": [7.637]
-        })
+        }).set_index('date')
         pd.testing.assert_frame_equal(expect, result)
 
     def test_read_multiple_files(self):
@@ -47,5 +47,5 @@ class TestEarthNetworks(unittest.TestCase):
             "date": 6 * [self.date],
             "longitude": 6 * [29.3603],
             "latitude": 6 * [7.637]
-        })
+        }).set_index('date')
         pd.testing.assert_frame_equal(expect, result)

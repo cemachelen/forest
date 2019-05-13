@@ -14,7 +14,8 @@ def read(csv_files):
             names=["flash_type", "date", "longitude", "latitude"],
             header=None)
         frames.append(frame)
-    return pd.concat(frames, ignore_index=True)
+    frame = pd.concat(frames, ignore_index=True)
+    return frame.set_index('date')
 
 
 def flash_type(value):
