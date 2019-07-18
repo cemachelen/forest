@@ -17,12 +17,11 @@ from util import Observable
 from db.util import autolabel
 import datetime as dt
 
+import control
+
 
 def main(argv=None):
     args = parse_args.parse_args(argv)
-    if len(args.files) > 0:
-        raise NotImplementedError("[FILE [FILE ...]] not implemented")
-
     if args.config_file is None:
         raise NotImplementedError("--config is mandatory for now")
 
@@ -34,6 +33,16 @@ def main(argv=None):
     database = db.Database.connect(args.database)
     with open(args.config_file) as stream:
         config = parse_args.parse_config(yaml.safe_load(stream))
+
+    # Redux design-pattern
+    action_log = control.ActionLog()
+    store = control.Store(control.reducer, middlewares=[action_log])
+    controller = control.FileSystem()
+    controller.subscribe(store.dispatch)
+    store.subscribe(controller.render)
+    store.subscribe(lambda s: print(action_log.actions))
+    if len(args.files) > 0:
+        store.dispatch(control.set_file_names(args.files))
 
     # Access latest files
     data.FILE_DB.sync()
@@ -144,11 +153,6 @@ def main(argv=None):
     for name, viewer in artist.viewers.items():
         if isinstance(viewer, (view.UMView, view.GPMView, view.EIDA50)):
             image_sources.append(viewer.source)
-
-    # image_loaders = []
-    # for name, loader in data.LOADERS.items():
-    #     if isinstance(loader, (data.UMLoader, data.GPM)):
-    #         image_loaders.append(loader)
 
     # Lakes
     for figure in figures:
@@ -266,6 +270,7 @@ def main(argv=None):
         bokeh.models.Panel(
             child=bokeh.layouts.column(
                 bokeh.models.Div(text="Navigate:"),
+                controller.layout,
                 controls.layout,
                 bokeh.models.Div(text="Compare:"),
                 bokeh.layouts.row(figure_drop),

@@ -15,7 +15,7 @@ class TestMain(unittest.TestCase):
         if os.path.exists(self.config_file):
             os.remove(self.config_file)
 
-    # @unittest.skip("integration test")
+    @unittest.skip("integration test")
     def test_main_program_given_minimal_config_file(self):
         data = {
             "models": [
