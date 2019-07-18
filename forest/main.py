@@ -1,3 +1,4 @@
+import yaml
 import bokeh.plotting
 import bokeh.events
 import numpy as np
@@ -17,13 +18,13 @@ from db.util import autolabel
 import datetime as dt
 
 
-def main():
-    args = parse_args.parse_args()
+def main(argv=None):
+    args = parse_args.parse_args(argv)
     if args.database != ':memory:':
         assert os.path.exists(args.database), "{} must exist".format(args.database)
     database = db.Database.connect(args.database)
     with open(args.config_file) as stream:
-        config = parse_args.load_config(stream)
+        config = parse_args.parse_config(yaml.safe_load(stream))
 
     # Access latest files
     data.FILE_DB.sync()
