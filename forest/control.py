@@ -1,4 +1,5 @@
 """Controllers that generate actions and manage application state"""
+import netCDF4
 import bokeh.models
 import bokeh.layouts
 
@@ -15,6 +16,21 @@ class ActionLog(object):
                 next_method(action)
             return inner_most
         return inner
+
+
+def variables(store):
+    """middleware to extract variable information from a file"""
+    def inner(next_method):
+        def inner_most(action):
+            next_method(action)
+            kind, *payload = action
+            if kind == "set file":
+                file_name, = payload
+                with netCDF4.Dataset(file_name) as dataset:
+                    variables = [v for v in dataset.variables.keys()]
+                    next_method(set_variables(variables))
+        return inner_most
+    return inner
 
 
 class Observable(object):
@@ -68,14 +84,14 @@ def reducer(state, action):
     state = dict(state)
     kind, *payload = action
     if kind == "set file":
-        file_name, = payload
-        state["file"] = file_name
+        state["file"] = payload[0]
     elif kind == "set file names":
-        file_names, = payload
-        state["file_names"] = file_names
+        state["file_names"] = payload[0]
+    elif kind == "set variables":
+        state["variables"] = payload[0]
     return state
 
-
+# Actions
 def set_file(name):
     """action factory"""
     return ("set file", name)
@@ -84,3 +100,8 @@ def set_file(name):
 def set_file_names(names):
     """action factory"""
     return ("set file names", names)
+
+
+def set_variables(names):
+    """action factory"""
+    return ("set variables", names)

@@ -36,7 +36,9 @@ def main(argv=None):
 
     # Redux design-pattern
     action_log = control.ActionLog()
-    store = control.Store(control.reducer, middlewares=[action_log])
+    store = control.Store(control.reducer, middlewares=[
+        control.variables,
+        action_log])
     controller = control.FileSystem()
     controller.subscribe(store.dispatch)
     store.subscribe(controller.render)

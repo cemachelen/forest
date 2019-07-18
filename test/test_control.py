@@ -2,6 +2,7 @@ import unittest
 import unittest.mock
 import bokeh.layouts
 import forest.control
+import netCDF4
 
 
 class TestFileSystem(unittest.TestCase):
@@ -99,4 +100,22 @@ class TestMiddlewares(unittest.TestCase):
         store.dispatch(action)
         result = log.actions
         expect = [action]
+        self.assertEqual(expect, result)
+
+    def test_middleware_disk_io(self):
+        path = "test-file.nc"
+        action = ("set file", path)
+        with netCDF4.Dataset(path, "w") as dataset:
+            dataset.createDimension("x", 1)
+            dataset.createVariable("air_temperature", "f", ("x"))
+            dataset.createVariable("relative_humidity", "f", ("x"))
+
+        store = forest.control.Store(forest.control.reducer,
+                                     middlewares=[forest.control.variables])
+        store.dispatch(action)
+        result = store.state
+        expect = {
+            "file": path,
+            "variables": ["air_temperature", "relative_humidity"]
+        }
         self.assertEqual(expect, result)
