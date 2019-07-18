@@ -20,7 +20,8 @@ class ActionLog(object):
 
 
 class NetCDF(object):
-    """Middleware to extract meta-data from a file"""
+    """Middleware to extract meta-data from a file
+    """
     def __call__(self, store):
         def inner(next_method):
             def inner_most(action):
@@ -31,8 +32,19 @@ class NetCDF(object):
                     with netCDF4.Dataset(file_name) as dataset:
                         variables = [v for v in dataset.variables.keys()]
                         next_method(actions.set_variables(variables))
+                elif kind == actions.SET_VARIABLE:
+                    file_name = store.state["file"]
+                    variable = payload[0]
+                    with netCDF4.Dataset(file_name) as dataset:
+                        values = valid_times(dataset, variable)
+                        next_method(actions.set_valid_times(values))
             return inner_most
         return inner
+
+
+def valid_times(dataset, variable):
+    var = dataset.variables["time_0"]
+    return netCDF4.num2date(var[:], units=var.units)
 
 
 class Database(object):
@@ -106,4 +118,6 @@ def reducer(state, action):
         state["variables"] = payload[0]
     elif kind == actions.SET_VARIABLE:
         state["variable"] = payload[0]
+    elif kind == actions.SET_VALID_TIMES:
+        state["valid_times"] = payload[0]
     return state

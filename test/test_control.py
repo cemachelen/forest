@@ -3,6 +3,8 @@ import unittest.mock
 import bokeh.layouts
 import forest.control
 import forest.actions
+import os
+import datetime as dt
 import netCDF4
 
 
@@ -111,25 +113,6 @@ class TestMiddlewares(unittest.TestCase):
         expect = [action]
         self.assertEqual(expect, result)
 
-    def test_middleware_netcdf(self):
-        path = "test-file.nc"
-        action = forest.actions.set_file(path)
-        with netCDF4.Dataset(path, "w") as dataset:
-            dataset.createDimension("x", 1)
-            dataset.createVariable("air_temperature", "f", ("x"))
-            dataset.createVariable("relative_humidity", "f", ("x"))
-
-        ncdf = forest.control.NetCDF()
-        store = forest.control.Store(forest.control.reducer,
-                                     middlewares=[ncdf])
-        store.dispatch(action)
-        result = store.state
-        expect = {
-            "file": path,
-            "variables": ["air_temperature", "relative_humidity"]
-        }
-        self.assertEqual(expect, result)
-
     def test_middleware_sql_database(self):
         db = forest.control.Database()
         store = forest.control.Store(forest.control.reducer,
@@ -141,4 +124,47 @@ class TestMiddlewares(unittest.TestCase):
             "file": "file.nc",
             "variables": ["mslp"]
         }
+        self.assertEqual(expect, result)
+
+
+class TestNetCDFMiddleware(unittest.TestCase):
+    def setUp(self):
+        self.path = "test-file.nc"
+        middleware = forest.control.NetCDF()
+        self.store = forest.control.Store(forest.control.reducer,
+                                     middlewares=[middleware])
+
+    def tearDown(self):
+        if os.path.exists(self.path):
+            os.remove(self.path)
+
+    def test_middleware_netcdf(self):
+        with netCDF4.Dataset(self.path, "w") as dataset:
+            dataset.createDimension("x", 1)
+            dataset.createVariable("air_temperature", "f", ("x"))
+            dataset.createVariable("relative_humidity", "f", ("x"))
+
+        self.store.dispatch(forest.actions.set_file(self.path))
+
+        result = self.store.state
+        expect = {
+            "file": self.path,
+            "variables": ["air_temperature", "relative_humidity"]
+        }
+        self.assertEqual(expect, result)
+
+    def test_given_file_and_variable_triggers_set_valid_times(self):
+        units = "hours since 1970-01-01 00:00:00 utc"
+        with netCDF4.Dataset(self.path, "w") as dataset:
+            dataset.createDimension("time_0", 1)
+            var = dataset.createVariable("time_0", "f", ("time_0",))
+            var.units = units
+            var[:] = netCDF4.date2num([dt.datetime(2019, 1, 1)], units=units)
+            dataset.createVariable("air_temperature", "f", ("time_0",))
+
+        self.store.dispatch(forest.actions.set_file(self.path))
+        self.store.dispatch(forest.actions.set_variable("air_temperature"))
+
+        result = self.store.state["valid_times"]
+        expect = [dt.datetime(2019, 1, 1)]
         self.assertEqual(expect, result)

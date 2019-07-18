@@ -18,6 +18,7 @@ from db.util import autolabel
 import datetime as dt
 
 import control
+import actions
 
 
 def main(argv=None):
@@ -44,7 +45,7 @@ def main(argv=None):
     store.subscribe(controller.render)
     store.subscribe(lambda s: print(action_log.actions))
     if len(args.files) > 0:
-        store.dispatch(control.set_file_names(args.files))
+        store.dispatch(actions.set_file_names(args.files))
 
     # Access latest files
     data.FILE_DB.sync()

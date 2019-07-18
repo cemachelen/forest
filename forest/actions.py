@@ -10,6 +10,7 @@ SET_FILE = "set file"
 SET_FILE_NAMES = "set file names"
 SET_VARIABLE = "set variable"
 SET_VARIABLES = "set variables"
+SET_VALID_TIMES = "set valid times"
 
 
 def set_file(value):
@@ -26,3 +27,7 @@ def set_variable(value):
 
 def set_variables(value):
     return (SET_VARIABLES, value)
+
+
+def set_valid_times(value):
+    return (SET_VALID_TIMES, value)
