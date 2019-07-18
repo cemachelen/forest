@@ -20,6 +20,15 @@ import datetime as dt
 
 def main(argv=None):
     args = parse_args.parse_args(argv)
+    if len(args.files) > 0:
+        raise NotImplementedError("[FILE [FILE ...]] not implemented")
+
+    if args.config_file is None:
+        raise NotImplementedError("--config is mandatory for now")
+
+    if args.database is None:
+        raise NotImplementedError("--database is mandatory for now")
+
     if args.database != ':memory:':
         assert os.path.exists(args.database), "{} must exist".format(args.database)
     database = db.Database.connect(args.database)
