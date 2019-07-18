@@ -2,6 +2,7 @@ import unittest
 import unittest.mock
 import bokeh.layouts
 import forest.control
+import forest.actions
 import netCDF4
 
 
@@ -57,7 +58,7 @@ class TestStore(unittest.TestCase):
         self.assertEqual(expect, result)
 
     def test_dispatch_given_action_updates_state(self):
-        action = forest.control.set_file("file.nc")
+        action = forest.actions.set_file("file.nc")
         self.store.dispatch(action)
         result = self.store.state
         expect = {
@@ -66,7 +67,7 @@ class TestStore(unittest.TestCase):
         self.assertEqual(expect, result)
 
     def test_store_state_is_observable(self):
-        action = forest.control.set_file("file.nc")
+        action = forest.actions.set_file("file.nc")
         listener = unittest.mock.Mock()
         self.store.subscribe(listener)
         self.store.dispatch(action)
@@ -84,10 +85,18 @@ class TestReducer(unittest.TestCase):
 
     def test_reducer_given_set_file_names_action(self):
         files = ["a.nc", "b.nc"]
-        action = forest.control.set_file_names(files)
+        action = forest.actions.set_file_names(files)
         result = forest.control.reducer({}, action)
         expect = {
             "file_names": files
+        }
+        self.assertEqual(expect, result)
+
+    def test_reducer_given_set_variable(self):
+        action = forest.actions.set_variable("air_temperature")
+        result = forest.control.reducer({}, action)
+        expect = {
+            "variable": "air_temperature"
         }
         self.assertEqual(expect, result)
 
@@ -102,20 +111,34 @@ class TestMiddlewares(unittest.TestCase):
         expect = [action]
         self.assertEqual(expect, result)
 
-    def test_middleware_disk_io(self):
+    def test_middleware_netcdf(self):
         path = "test-file.nc"
-        action = ("set file", path)
+        action = forest.actions.set_file(path)
         with netCDF4.Dataset(path, "w") as dataset:
             dataset.createDimension("x", 1)
             dataset.createVariable("air_temperature", "f", ("x"))
             dataset.createVariable("relative_humidity", "f", ("x"))
 
+        ncdf = forest.control.NetCDF()
         store = forest.control.Store(forest.control.reducer,
-                                     middlewares=[forest.control.variables])
+                                     middlewares=[ncdf])
         store.dispatch(action)
         result = store.state
         expect = {
             "file": path,
             "variables": ["air_temperature", "relative_humidity"]
+        }
+        self.assertEqual(expect, result)
+
+    def test_middleware_sql_database(self):
+        db = forest.control.Database()
+        store = forest.control.Store(forest.control.reducer,
+                                     middlewares=[db])
+        action = forest.actions.set_file("file.nc")
+        store.dispatch(action)
+        result = store.state
+        expect = {
+            "file": "file.nc",
+            "variables": ["mslp"]
         }
         self.assertEqual(expect, result)

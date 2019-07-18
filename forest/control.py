@@ -2,6 +2,7 @@
 import netCDF4
 import bokeh.models
 import bokeh.layouts
+from forest import actions
 
 
 class ActionLog(object):
@@ -18,19 +19,33 @@ class ActionLog(object):
         return inner
 
 
-def variables(store):
-    """middleware to extract variable information from a file"""
-    def inner(next_method):
-        def inner_most(action):
-            next_method(action)
-            kind, *payload = action
-            if kind == "set file":
-                file_name, = payload
-                with netCDF4.Dataset(file_name) as dataset:
-                    variables = [v for v in dataset.variables.keys()]
-                    next_method(set_variables(variables))
-        return inner_most
-    return inner
+class NetCDF(object):
+    """Middleware to extract meta-data from a file"""
+    def __call__(self, store):
+        def inner(next_method):
+            def inner_most(action):
+                next_method(action)
+                kind, *payload = action
+                if kind == actions.SET_FILE:
+                    file_name, = payload
+                    with netCDF4.Dataset(file_name) as dataset:
+                        variables = [v for v in dataset.variables.keys()]
+                        next_method(actions.set_variables(variables))
+            return inner_most
+        return inner
+
+
+class Database(object):
+    """Middleware to query SQL database"""
+    def __call__(self, store):
+        def inner(next_method):
+            def inner_most(action):
+                next_method(action)
+                kind, *payload = action
+                if kind == actions.SET_FILE:
+                    next_method(actions.set_variables(["mslp"]))
+            return inner_most
+        return inner
 
 
 class Observable(object):
@@ -60,7 +75,7 @@ class FileSystem(Observable):
             self.dropdown.menu = [(name, name) for name in state["file_names"]]
 
     def on_file(self, attr, old, new):
-        self.notify(set_file(new))
+        self.notify(actions.set_file(new))
 
 
 class Store(Observable):
@@ -83,25 +98,12 @@ class Store(Observable):
 def reducer(state, action):
     state = dict(state)
     kind, *payload = action
-    if kind == "set file":
+    if kind == actions.SET_FILE:
         state["file"] = payload[0]
-    elif kind == "set file names":
+    elif kind == actions.SET_FILE_NAMES:
         state["file_names"] = payload[0]
-    elif kind == "set variables":
+    elif kind == actions.SET_VARIABLES:
         state["variables"] = payload[0]
+    elif kind == actions.SET_VARIABLE:
+        state["variable"] = payload[0]
     return state
-
-# Actions
-def set_file(name):
-    """action factory"""
-    return ("set file", name)
-
-
-def set_file_names(names):
-    """action factory"""
-    return ("set file names", names)
-
-
-def set_variables(names):
-    """action factory"""
-    return ("set variables", names)
