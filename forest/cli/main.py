@@ -66,7 +66,7 @@ def bokeh_args(app_path, args):
         opts += ["--allow-websocket-origin", str(args.allow_websocket_origin)]
     extra = []
     if args.config is not None:
-        extra += ["--config-file", str(args.config)]
+        extra += ["--config", str(args.config)]
     if args.database is not None:
         extra += ["--database", str(args.database)]
     if args.directory is not None:

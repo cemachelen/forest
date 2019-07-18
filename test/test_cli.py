@@ -43,8 +43,7 @@ class TestForestToBokehServe(unittest.TestCase):
         self.assertEqual(expect, result)
 
     def test_bokeh_args_given_config(self):
-        self.check_extra_args(["--config", "file.yml"],
-                              ["--config-file", "file.yml"])
+        self.check_extra_args(["--config", "file.yml"])
 
     def test_bokeh_args_given_database(self):
         self.check_extra_args(["--database", "file.db", "file.nc"])
