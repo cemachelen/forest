@@ -109,15 +109,7 @@ class Store(Observable):
 
 def reducer(state, action):
     state = dict(state)
-    kind, *payload = action
-    if kind == actions.SET_FILE:
-        state["file"] = payload[0]
-    elif kind == actions.SET_FILE_NAMES:
-        state["file_names"] = payload[0]
-    elif kind == actions.SET_VARIABLES:
-        state["variables"] = payload[0]
-    elif kind == actions.SET_VARIABLE:
-        state["variable"] = payload[0]
-    elif kind == actions.SET_VALID_TIMES:
-        state["valid_times"] = payload[0]
+    kind, value = action
+    if kind.lower().startswith("set_"):
+        state[kind.lower()[4:]] = value
     return state

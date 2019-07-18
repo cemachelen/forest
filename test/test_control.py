@@ -46,7 +46,7 @@ class TestFileSystem(unittest.TestCase):
         listener = unittest.mock.Mock()
         self.controller.subscribe(listener)
         self.controller.on_file(attr, old, new)
-        action = ("set file", "file.nc")
+        action = forest.actions.set_file("file.nc")
         listener.assert_called_once_with(action)
 
 
@@ -79,7 +79,8 @@ class TestStore(unittest.TestCase):
 
 class TestReducer(unittest.TestCase):
     def test_reducer(self):
-        result = forest.control.reducer({}, ("set file", "file.nc"))
+        action = forest.actions.set_file("file.nc")
+        result = forest.control.reducer({}, action)
         expect = {
             "file": "file.nc"
         }
@@ -99,6 +100,36 @@ class TestReducer(unittest.TestCase):
         result = forest.control.reducer({}, action)
         expect = {
             "variable": "air_temperature"
+        }
+        self.assertEqual(expect, result)
+
+    def test_reducer_given_set_pressures(self):
+        action = forest.actions.set_pressures([1000., 950.])
+        self.check(action, "pressures", [1000., 950.])
+
+    def test_reducer_given_set_pressure(self):
+        action = forest.actions.set_pressure(850.)
+        self.check(action, "pressure", 850.)
+
+    def test_reducer_given_set_initial_time(self):
+        value = "2019-01-01 00:00:00"
+        action = forest.actions.set_initial_time(value)
+        self.check(action, "initial_time", value)
+
+    def test_reducer_given_set_initial_times(self):
+        value = ["2019-01-01 00:00:00", "2019-01-01 12:00:00"]
+        action = forest.actions.set_initial_times(value)
+        self.check(action, "initial_times", value)
+
+    def test_reducer_given_set_valid_time(self):
+        value = "2019-01-01 00:00:00"
+        action = forest.actions.set_valid_time(value)
+        self.check(action, "valid_time", value)
+
+    def check(self, action, attr, value):
+        result = forest.control.reducer({}, action)
+        expect = {
+            attr: value
         }
         self.assertEqual(expect, result)
 
