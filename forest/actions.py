@@ -32,4 +32,6 @@ sys.modules[__name__] = ActionsModule([
     "SET_INITIAL_TIMES",
     "SET_PRESSURE",
     "SET_PRESSURES",
+    "NEXT",
+    "PREVIOUS"
 ])

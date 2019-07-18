@@ -112,4 +112,12 @@ def reducer(state, action):
     kind, value = action
     if kind.lower().startswith("set_"):
         state[kind.lower()[4:]] = value
+    elif kind.lower() == "next":
+        key = {
+            "pressure": "pressures",
+            "initial_time": "initial_times",
+            "valid_time": "valid_times"
+        }[value]
+        items = state[key]
+        state[value] = items[0]
     return state
