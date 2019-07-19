@@ -1,7 +1,7 @@
 import unittest
 import unittest.mock
 import datetime as dt
-import db
+from forest import db
 
 
 class TestControls(unittest.TestCase):
