@@ -8,6 +8,7 @@ performed through reducers is one way to tackle callback hell and
 complex model view controller relationships
 
 """
+from collections import OrderedDict
 
 __all__ = [
     "Store",
@@ -59,4 +60,18 @@ def reducer(state, action):
         }[attr]
         items = state[key]
         state[attr] = items[0]
+    elif kind.upper() == "ADD":
+        category, name, settings = rest
+        presets = state.get("presets", [])
+        tree = OrderedDict({p["name"]: p for p in presets})
+        data = dict(settings)
+        data["name"] = name
+        tree[name] = data
+        state["presets"] = list(tree.values())
+    elif kind.upper() == "REMOVE":
+        category, name = rest
+        state["presets"] = [
+            item for item in state["presets"]
+            if item["name"] != name
+        ]
     return state

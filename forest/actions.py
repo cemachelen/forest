@@ -8,6 +8,13 @@ Or indeed, ``MOVE.pressure.forward``, is probably easier to read
 than ``("MOVE", "pressure", "forward")`` although both generate the same tuple
 """
 
+__all__ = [
+    "ADD",
+    "REMOVE",
+    "SET",
+    "MOVE"
+]
+
 
 class Assign(object):
     def __init__(self, props):
@@ -15,6 +22,22 @@ class Assign(object):
 
     def to(self, value):
         return self._props + (value,)
+
+
+class Append(object):
+    def __init__(self, props):
+        self._props = props
+
+    def by_name(self, name, value):
+        return self._props + (name, value)
+
+
+class Remove(object):
+    def __init__(self, props):
+        self._props = props
+
+    def by_name(self, name):
+        return self._props + (name,)
 
 
 class Motion(object):
@@ -39,11 +62,17 @@ class Action(object):
             return Assign((self._verb, key))
         elif self._verb == "MOVE":
             return Motion((self._verb, key))
+        elif self._verb == "ADD":
+            return Append((self._verb, key))
+        elif self._verb == "REMOVE":
+            return Remove((self._verb, key))
         else:
             raise Exception("Unknown verb: {}".format(self._verb))
 
     __getitem__ = __getattr__
 
 
+ADD = Action("ADD")
+REMOVE = Action("REMOVE")
 SET = Action("SET")
 MOVE = Action("MOVE")
