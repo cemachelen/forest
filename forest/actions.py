@@ -1,37 +1,49 @@
 """Tokens to communicate between components
 
 Module constants prevent string literals from polluting the code base
-and factory methods are more readable, ``action = actions.set_file('file.nc')``
-is easier to read than ``action = (actions.SET_FILE, 'file.nc')``
+and factory methods are more readable, ``action = SET.file_name.to('file.nc')``
+is easier to read than ``action = ("SET", "file_name", "file.nc")``
 
-.. note:: There has been some usage of Python's import system
-          to reduce boiler-plate code
+Or indeed, ``MOVE.pressure.forward``, is probably easier to read
+than ``("MOVE", "pressure", "forward")`` although both generate the same tuple
 """
 
-def closure(token):
-    def factory(value):
-        return (token, value)
-    return factory
+
+class Assign(object):
+    def __init__(self, props):
+        self._props = props
+
+    def to(self, value):
+        return self._props + (value,)
 
 
-class ActionsModule(object):
-    def __init__(self, tokens):
-        for token in tokens:
-            self.__setattr__(token.upper(), token)
-            self.__setattr__(token.lower(), closure(token.upper()))
+class Motion(object):
+    def __init__(self, props):
+        self._props = props
 
-import sys
-sys.modules[__name__] = ActionsModule([
-    "SET_FILE",
-    "SET_FILE_NAMES",
-    "SET_VARIABLE",
-    "SET_VARIABLES",
-    "SET_VALID_TIME",
-    "SET_VALID_TIMES",
-    "SET_INITIAL_TIME",
-    "SET_INITIAL_TIMES",
-    "SET_PRESSURE",
-    "SET_PRESSURES",
-    "NEXT",
-    "PREVIOUS"
-])
+    @property
+    def forward(self):
+        return self._props + ("forward",)
+
+    @property
+    def backward(self):
+        return self._props + ("backward",)
+
+
+class Action(object):
+    def __init__(self, verb):
+        self._verb = verb
+
+    def __getattr__(self, key):
+        if self._verb == "SET":
+            return Assign((self._verb, key))
+        elif self._verb == "MOVE":
+            return Motion((self._verb, key))
+        else:
+            raise Exception("Unknown verb: {}".format(self._verb))
+
+    __getitem__ = __getattr__
+
+
+SET = Action("SET")
+MOVE = Action("MOVE")

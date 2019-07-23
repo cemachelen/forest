@@ -255,8 +255,10 @@ class View(Observable):
                     label="Previous",
                     width=widths["button"]),
             }
-            self.buttons[key]['next'].on_click(self.on_click('next', key))
-            self.buttons[key]['previous'].on_click(self.on_click('previous', key))
+            self.buttons[key]['next'].on_click(
+                self.on_click('next', key))
+            self.buttons[key]['previous'].on_click(
+                self.on_click('previous', key))
             self.rows[key] = bokeh.layouts.row(
                 self.buttons[key]["previous"],
                 self.dropdowns[key],

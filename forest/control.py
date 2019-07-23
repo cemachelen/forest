@@ -26,18 +26,20 @@ class NetCDF(object):
         def inner(next_method):
             def inner_most(action):
                 next_method(action)
-                kind, *payload = action
-                if kind == actions.SET_FILE:
-                    file_name, = payload
-                    with netCDF4.Dataset(file_name) as dataset:
-                        variables = [v for v in dataset.variables.keys()]
-                        next_method(actions.set_variables(variables))
-                elif kind == actions.SET_VARIABLE:
-                    file_name = store.state["file"]
-                    variable = payload[0]
-                    with netCDF4.Dataset(file_name) as dataset:
-                        values = valid_times(dataset, variable)
-                        next_method(actions.set_valid_times(values))
+                kind, *rest = action
+                if kind.upper() == "SET":
+                    attr, value = rest
+                    if attr.upper() == "FILE_NAME":
+                        file_name = value
+                        with netCDF4.Dataset(file_name) as dataset:
+                            variables = [v for v in dataset.variables.keys()]
+                            next_method(actions.SET.variables.to(variables))
+                    elif attr.upper() == "VARIABLE":
+                        file_name = store.state["file_name"]
+                        variable = value
+                        with netCDF4.Dataset(file_name) as dataset:
+                            values = valid_times(dataset, variable)
+                            next_method(actions.SET.valid_times.to(values))
             return inner_most
         return inner
 
@@ -53,9 +55,11 @@ class Database(object):
         def inner(next_method):
             def inner_most(action):
                 next_method(action)
-                kind, *payload = action
-                if kind == actions.SET_FILE:
-                    next_method(actions.set_variables(["mslp"]))
+                kind, *rest = action
+                if kind.upper() == "SET":
+                    attr, value = rest
+                    if attr.upper() == "FILE_NAME":
+                        next_method(actions.SET.variables.to(["mslp"]))
             return inner_most
         return inner
 
@@ -81,13 +85,13 @@ class FileSystem(Observable):
         super().__init__()
 
     def render(self, state):
-        if "file" in state:
-            self.dropdown.label = state["file"]
+        if "file_name" in state:
+            self.dropdown.label = state["file_name"]
         if "file_names" in state:
             self.dropdown.menu = [(name, name) for name in state["file_names"]]
 
     def on_file(self, attr, old, new):
-        self.notify(actions.set_file(new))
+        self.notify(actions.SET.file_name.to(new))
 
 
 class Store(Observable):
@@ -109,15 +113,17 @@ class Store(Observable):
 
 def reducer(state, action):
     state = dict(state)
-    kind, value = action
-    if kind.lower().startswith("set_"):
-        state[kind.lower()[4:]] = value
-    elif kind.lower() == "next":
+    kind, *rest = action
+    if kind.upper() == "SET":
+        key, value = rest
+        state[key] = value
+    elif kind.upper() == "MOVE":
+        attr, direction = rest
         key = {
             "pressure": "pressures",
             "initial_time": "initial_times",
             "valid_time": "valid_times"
-        }[value]
+        }[attr]
         items = state[key]
-        state[value] = items[0]
+        state[attr] = items[0]
     return state

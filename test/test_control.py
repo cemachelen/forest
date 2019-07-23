@@ -34,7 +34,7 @@ class TestFileSystem(unittest.TestCase):
 
     def test_render_given_file_name(self):
         state = {
-            'file': "hello.nc"
+            'file_name': "hello.nc"
         }
         self.controller.render(state)
         result = self.controller.dropdown.label
@@ -46,7 +46,7 @@ class TestFileSystem(unittest.TestCase):
         listener = unittest.mock.Mock()
         self.controller.subscribe(listener)
         self.controller.on_file(attr, old, new)
-        action = forest.actions.set_file("file.nc")
+        action = forest.actions.SET.file_name.to("file.nc")
         listener.assert_called_once_with(action)
 
 
@@ -60,35 +60,35 @@ class TestStore(unittest.TestCase):
         self.assertEqual(expect, result)
 
     def test_dispatch_given_action_updates_state(self):
-        action = forest.actions.set_file("file.nc")
+        action = forest.actions.SET.file_name.to("file.nc")
         self.store.dispatch(action)
         result = self.store.state
         expect = {
-            "file": "file.nc"
+            "file_name": "file.nc"
         }
         self.assertEqual(expect, result)
 
     def test_store_state_is_observable(self):
-        action = forest.actions.set_file("file.nc")
+        action = forest.actions.SET.file_name.to("file.nc")
         listener = unittest.mock.Mock()
         self.store.subscribe(listener)
         self.store.dispatch(action)
-        expect = {"file": "file.nc"}
+        expect = {"file_name": "file.nc"}
         listener.assert_called_once_with(expect)
 
 
 class TestReducer(unittest.TestCase):
     def test_reducer(self):
-        action = forest.actions.set_file("file.nc")
+        action = forest.actions.SET.file_name.to("file.nc")
         result = forest.control.reducer({}, action)
         expect = {
-            "file": "file.nc"
+            "file_name": "file.nc"
         }
         self.assertEqual(expect, result)
 
     def test_reducer_given_set_file_names_action(self):
         files = ["a.nc", "b.nc"]
-        action = forest.actions.set_file_names(files)
+        action = forest.actions.SET.file_names.to(files)
         result = forest.control.reducer({}, action)
         expect = {
             "file_names": files
@@ -96,7 +96,7 @@ class TestReducer(unittest.TestCase):
         self.assertEqual(expect, result)
 
     def test_reducer_given_set_variable(self):
-        action = forest.actions.set_variable("air_temperature")
+        action = forest.actions.SET.variable.to("air_temperature")
         result = forest.control.reducer({}, action)
         expect = {
             "variable": "air_temperature"
@@ -104,26 +104,26 @@ class TestReducer(unittest.TestCase):
         self.assertEqual(expect, result)
 
     def test_reducer_given_set_pressures(self):
-        action = forest.actions.set_pressures([1000., 950.])
+        action = forest.actions.SET.pressures.to([1000., 950.])
         self.check(action, "pressures", [1000., 950.])
 
     def test_reducer_given_set_pressure(self):
-        action = forest.actions.set_pressure(850.)
+        action = forest.actions.SET.pressure.to(850.)
         self.check(action, "pressure", 850.)
 
     def test_reducer_given_set_initial_time(self):
         value = "2019-01-01 00:00:00"
-        action = forest.actions.set_initial_time(value)
+        action = forest.actions.SET.initial_time.to(value)
         self.check(action, "initial_time", value)
 
     def test_reducer_given_set_initial_times(self):
         value = ["2019-01-01 00:00:00", "2019-01-01 12:00:00"]
-        action = forest.actions.set_initial_times(value)
+        action = forest.actions.SET.initial_times.to(value)
         self.check(action, "initial_times", value)
 
     def test_reducer_given_set_valid_time(self):
         value = "2019-01-01 00:00:00"
-        action = forest.actions.set_valid_time(value)
+        action = forest.actions.SET.valid_time.to(value)
         self.check(action, "valid_time", value)
 
     def check(self, action, attr, value):
@@ -134,18 +134,18 @@ class TestReducer(unittest.TestCase):
         self.assertEqual(expect, result)
 
     def test_actions_given_next_pressure(self):
-        result = forest.actions.next("pressure")
-        expect = ("NEXT", "pressure")
+        result = forest.actions.MOVE.pressure.forward
+        expect = ("MOVE", "pressure", "forward")
         self.assertEqual(expect, result)
 
     def test_actions_given_previous_valid_time(self):
-        result = forest.actions.previous("valid_time")
-        expect = ("PREVIOUS", "valid_time")
+        result = forest.actions.MOVE.valid_time.backward
+        expect = ("MOVE", "valid_time", "backward")
         self.assertEqual(expect, result)
 
     def test_reducer_given_pressures_and_next_pressure(self):
         pressures = [1, 2, 3]
-        action = forest.actions.next("pressure")
+        action = forest.actions.MOVE.pressure.forward
         result = forest.control.reducer({"pressures": pressures}, action)
         expect = {
             "pressures": pressures,
@@ -168,11 +168,11 @@ class TestMiddlewares(unittest.TestCase):
         db = forest.control.Database()
         store = forest.control.Store(forest.control.reducer,
                                      middlewares=[db])
-        action = forest.actions.set_file("file.nc")
+        action = forest.actions.SET.file_name.to("file.nc")
         store.dispatch(action)
         result = store.state
         expect = {
-            "file": "file.nc",
+            "file_name": "file.nc",
             "variables": ["mslp"]
         }
         self.assertEqual(expect, result)
@@ -195,11 +195,11 @@ class TestNetCDFMiddleware(unittest.TestCase):
             dataset.createVariable("air_temperature", "f", ("x"))
             dataset.createVariable("relative_humidity", "f", ("x"))
 
-        self.store.dispatch(forest.actions.set_file(self.path))
+        self.store.dispatch(forest.actions.SET.file_name.to(self.path))
 
         result = self.store.state
         expect = {
-            "file": self.path,
+            "file_name": self.path,
             "variables": ["air_temperature", "relative_humidity"]
         }
         self.assertEqual(expect, result)
@@ -213,8 +213,8 @@ class TestNetCDFMiddleware(unittest.TestCase):
             var[:] = netCDF4.date2num([dt.datetime(2019, 1, 1)], units=units)
             dataset.createVariable("air_temperature", "f", ("time_0",))
 
-        self.store.dispatch(forest.actions.set_file(self.path))
-        self.store.dispatch(forest.actions.set_variable("air_temperature"))
+        self.store.dispatch(forest.actions.SET.file_name.to(self.path))
+        self.store.dispatch(forest.actions.SET.variable.to("air_temperature"))
 
         result = self.store.state["valid_times"]
         expect = [dt.datetime(2019, 1, 1)]
