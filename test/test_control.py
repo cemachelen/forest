@@ -182,8 +182,9 @@ class TestNetCDFMiddleware(unittest.TestCase):
     def setUp(self):
         self.path = "test-file.nc"
         middleware = forest.control.NetCDF()
-        self.store = forest.control.Store(forest.control.reducer,
-                                     middlewares=[middleware])
+        self.store = forest.Store(
+            forest.reducer,
+            middlewares=[middleware])
 
     def tearDown(self):
         if os.path.exists(self.path):
@@ -195,7 +196,7 @@ class TestNetCDFMiddleware(unittest.TestCase):
             dataset.createVariable("air_temperature", "f", ("x"))
             dataset.createVariable("relative_humidity", "f", ("x"))
 
-        self.store.dispatch(forest.actions.SET.file_name.to(self.path))
+        self.store.dispatch(forest.SET.file_name.to(self.path))
 
         result = self.store.state
         expect = {
