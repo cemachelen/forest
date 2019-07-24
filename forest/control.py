@@ -3,6 +3,7 @@ import netCDF4
 import bokeh.models
 import bokeh.layouts
 from forest import actions
+from forest.observe import Observable
 
 
 class ActionLog(object):
@@ -62,18 +63,6 @@ class Database(object):
                         next_method(actions.SET.variables.to(["mslp"]))
             return inner_most
         return inner
-
-
-class Observable(object):
-    def __init__(self):
-        self.subscribers = []
-
-    def subscribe(self, callback):
-        self.subscribers.append(callback)
-
-    def notify(self, state):
-        for callback in self.subscribers:
-            callback(state)
 
 
 class FileSystem(Observable):

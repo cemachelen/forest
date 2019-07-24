@@ -19,33 +19,30 @@ import datetime as dt
 
 import control
 import actions
+import navigate
 
 
 def main(argv=None):
     args = parse_args.parse_args(argv)
-    if args.config_file is None:
-        raise NotImplementedError("--config is mandatory for now")
+    if args.config_file is not None:
+        with open(args.config_file) as stream:
+            config = parse_args.parse_config(yaml.safe_load(stream))
 
-    if args.database is None:
-        raise NotImplementedError("--database is mandatory for now")
-
-    if args.database != ':memory:':
-        assert os.path.exists(args.database), "{} must exist".format(args.database)
-    database = db.Database.connect(args.database)
-    with open(args.config_file) as stream:
-        config = parse_args.parse_config(yaml.safe_load(stream))
+    if args.database is not None:
+        if args.database != ':memory:':
+            assert os.path.exists(args.database), "{} must exist".format(args.database)
+        database = db.Database.connect(args.database)
 
     # Redux design-pattern
     action_log = control.ActionLog()
     store = control.Store(control.reducer, middlewares=[
-        control.NetCDF(),
         action_log])
-    controller = control.FileSystem()
-    controller.subscribe(store.dispatch)
-    store.subscribe(controller.render)
+    navigator = navigate.Navigator()
+    navigator.subscribe(store.dispatch)
+    store.subscribe(navigator.render)
     store.subscribe(lambda s: print(action_log.actions))
     if len(args.files) > 0:
-        store.dispatch(actions.set_file_names(args.files))
+        store.dispatch(actions.SET.file_names.to(args.files))
 
     # Access latest files
     data.FILE_DB.sync()
@@ -122,13 +119,15 @@ def main(argv=None):
             bar_line_color="black")
         figure.add_layout(colorbar, 'center')
 
-    for name, pattern in config.patterns:
-        if name not in data.LOADERS:
-            locator = db.Locator(
-                database.connection,
-                directory=args.directory)
-            loader = data.DBLoader(name, pattern, locator)
-            data.add_loader(name, loader)
+    # NOTE: Following code should not depend on SQL database
+    if False:
+        for name, pattern in config.patterns:
+            if name not in data.LOADERS:
+                locator = db.Locator(
+                    database.connection,
+                    directory=args.directory)
+                loader = data.DBLoader(name, pattern, locator)
+                data.add_loader(name, loader)
 
     renderers = {}
     viewers = {}
@@ -221,8 +220,11 @@ def main(argv=None):
     mapper_limits = MapperLimits(image_sources, color_mapper)
 
     menu = [(n, n) for n in data.FILE_DB.names]
-    for k, _ in config.patterns:
-        menu.append((k, k))
+
+    # NOTE: Following code should be replaced by middleware
+    if False:
+        for k, _ in config.patterns:
+            menu.append((k, k))
 
     image_controls = images.Controls(menu)
 
@@ -244,37 +246,35 @@ def main(argv=None):
         bokeh.layouts.column(div),
         bokeh.layouts.column(dropdown))
 
-    # Pre-select menu choices (if any)
-    state = None
-    for _, pattern in config.patterns:
-        state = db.initial_state(database, pattern=pattern)
-        break
+    # NOTE: Following code should be replaced by middleware
+    if False:
+        # Pre-select menu choices (if any)
+        state = None
+        for _, pattern in config.patterns:
+            state = db.initial_state(database, pattern=pattern)
+            break
 
-    # Pre-select first layer
-    for name, _ in config.patterns:
-        image_controls.select(name)
-        break
+        # Pre-select first layer
+        for name, _ in config.patterns:
+            image_controls.select(name)
+            break
 
-    # Add prototype database controls
-    controls = db.Controls(database, patterns=config.patterns, state=state)
-    controls.subscribe(controls.render)
-    locator = db.Locator(
-        database.connection,
-        directory=args.directory)
-    # text = db.View(text="", locator=locator)
-    # controls.subscribe(text.on_state)
-    # text.div removed from Panel
-    controls.subscribe(artist.on_state)
+        # Add prototype database controls
+        controls = db.Controls(database, patterns=config.patterns, state=state)
+        controls.subscribe(controls.render)
+        locator = db.Locator(
+            database.connection,
+            directory=args.directory)
+        controls.subscribe(artist.on_state)
 
-    # Ensure all listeners are pointing to the current state
-    controls.notify(controls.state)
+        # Ensure all listeners are pointing to the current state
+        controls.notify(controls.state)
 
     tabs = bokeh.models.Tabs(tabs=[
         bokeh.models.Panel(
             child=bokeh.layouts.column(
                 bokeh.models.Div(text="Navigate:"),
-                controller.layout,
-                controls.layout,
+                navigator.layout,
                 bokeh.models.Div(text="Compare:"),
                 bokeh.layouts.row(figure_drop),
                 image_controls.column),
@@ -321,7 +321,11 @@ def main(argv=None):
             "y": []})
 
     series = Series(series_figure)
-    controls.subscribe(series.on_state)
+
+    # NOTE: consider using navigation observable
+    if False:
+        controls.subscribe(series.on_state)
+
     for f in figures:
         f.on_event(bokeh.events.Tap, series.on_tap)
         f.on_event(bokeh.events.Tap, place_marker(f, marker_source))

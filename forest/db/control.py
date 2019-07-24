@@ -3,13 +3,13 @@ import bokeh.models
 import bokeh.layouts
 from . import util
 from collections import namedtuple
+from forest.observe import Observable
 
 
 __all__ = [
     "State",
     "ButtonClick",
     "Message",
-    "Observable",
     "Controls",
     "next_state",
     "initial_state"
@@ -96,18 +96,6 @@ class ButtonClick(object):
         return "{}({})".format(
             ".".join(names),
             ", ".join(map(stringify, args)))
-
-
-class Observable(object):
-    def __init__(self):
-        self.subscribers = []
-
-    def subscribe(self, callback):
-        self.subscribers.append(callback)
-
-    def notify(self, state):
-        for callback in self.subscribers:
-            callback(state)
 
 
 def initial_state(database, pattern=None):
@@ -218,78 +206,8 @@ def previous_item(items, item):
     return items[i - 1]
 
 
-class View(Observable):
-    """Navigation layout"""
-    def __init__(self):
-        widths = {
-            "dropdown": 180,
-            "button": 75
-        }
-        self.dropdowns = {
-            "pattern": bokeh.models.Dropdown(
-                label="Model/observation"),
-            "variable": bokeh.models.Dropdown(
-                label="Variable",
-                width=widths["dropdown"]),
-            "initial_time": bokeh.models.Dropdown(
-                label="Initial time",
-                width=widths["dropdown"]),
-            "valid_time": bokeh.models.Dropdown(
-                label="Valid time",
-                width=widths["dropdown"]),
-            "pressure": bokeh.models.Dropdown(
-                label="Pressure",
-                width=widths["dropdown"])
-        }
-        for key, dropdown in self.dropdowns.items():
-            util.autowarn(dropdown)
-            dropdown.on_change("value", self.on_change(key))
-        self.rows = {}
-        self.buttons = {}
-        for key in ["pressure", "valid_time", "initial_time"]:
-            self.buttons[key] = {
-                'next': bokeh.models.Button(
-                    label="Next",
-                    width=widths["button"]),
-                'previous': bokeh.models.Button(
-                    label="Previous",
-                    width=widths["button"]),
-            }
-            self.buttons[key]['next'].on_click(
-                self.on_click('next', key))
-            self.buttons[key]['previous'].on_click(
-                self.on_click('previous', key))
-            self.rows[key] = bokeh.layouts.row(
-                self.buttons[key]["previous"],
-                self.dropdowns[key],
-                self.buttons[key]["next"])
-        self.layout = bokeh.layouts.column(
-            self.dropdowns["pattern"],
-            self.dropdowns["variable"],
-            self.rows["initial_time"],
-            self.rows["valid_time"],
-            self.rows["pressure"])
-        super().__init__()
-
-    def render(self, state):
-        pass
-
-    def on_change(self, category):
-        # Facade: between bokeh callback and FOREST actions
-        def callback(attr, old, new):
-            self.notify(("SET", category, new))
-        return callback
-
-    def on_click(self, direction, category):
-        # Facade: between bokeh callback and FOREST actions
-        def callback():
-            self.notify(("MOVE", direction, category))
-        return callback
-
-
 class Controls(Observable):
     def __init__(self, database, patterns=None, state=None):
-        self.view = View()
         if patterns is None:
             patterns = []
         self.patterns = patterns
