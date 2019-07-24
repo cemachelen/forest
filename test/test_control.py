@@ -133,26 +133,6 @@ class TestReducer(unittest.TestCase):
         }
         self.assertEqual(expect, result)
 
-    def test_actions_given_next_pressure(self):
-        result = forest.actions.MOVE.pressure.forward
-        expect = ("MOVE", "pressure", "forward")
-        self.assertEqual(expect, result)
-
-    def test_actions_given_previous_valid_time(self):
-        result = forest.actions.MOVE.valid_time.backward
-        expect = ("MOVE", "valid_time", "backward")
-        self.assertEqual(expect, result)
-
-    def test_reducer_given_pressures_and_next_pressure(self):
-        pressures = [1, 2, 3]
-        action = forest.actions.MOVE.pressure.forward
-        result = forest.control.reducer({"pressures": pressures}, action)
-        expect = {
-            "pressures": pressures,
-            "pressure": pressures[0]
-        }
-        self.assertEqual(expect, result)
-
 
 class TestMiddlewares(unittest.TestCase):
     def test_middleware_log_actions(self):

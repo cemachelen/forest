@@ -12,7 +12,7 @@ __all__ = [
     "ADD",
     "REMOVE",
     "SET",
-    "MOVE"
+    "move"
 ]
 
 
@@ -40,19 +40,6 @@ class Remove(object):
         return self._props + (name,)
 
 
-class Motion(object):
-    def __init__(self, props):
-        self._props = props
-
-    @property
-    def forward(self):
-        return self._props + ("forward",)
-
-    @property
-    def backward(self):
-        return self._props + ("backward",)
-
-
 class Action(object):
     def __init__(self, verb):
         self._verb = verb
@@ -72,7 +59,16 @@ class Action(object):
     __getitem__ = __getattr__
 
 
+def move(item_key, items_key, direction):
+    """Helper to represent MOVE action as tuple
+
+    :param item_key: key in state to be moved
+    :param items_key: key in state containing multiple values
+    :param direction: either forward/backward
+    """
+    return ("MOVE", item_key, "GIVEN", items_key, direction)
+
+
 ADD = Action("ADD")
 REMOVE = Action("REMOVE")
 SET = Action("SET")
-MOVE = Action("MOVE")

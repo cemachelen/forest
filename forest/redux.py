@@ -52,14 +52,7 @@ def reducer(state, action):
         key, value = rest
         state[key] = value
     elif kind.upper() == "MOVE":
-        attr, direction = rest
-        key = {
-            "pressure": "pressures",
-            "initial_time": "initial_times",
-            "valid_time": "valid_times"
-        }[attr]
-        items = state[key]
-        state[attr] = items[0]
+        state = move_reducer(state, action)
     elif kind.upper() == "ADD":
         category, name, settings = rest
         presets = state.get("presets", [])
@@ -75,3 +68,31 @@ def reducer(state, action):
             if item["name"] != name
         ]
     return state
+
+
+def move_reducer(state, action):
+    _, item_key, _, items_key, direction = action
+    if items_key in state:
+        item = state.get(item_key, None)
+        items = state[items_key]
+        if direction == "forward":
+            state[item_key] = next_item(items, item)
+        else:
+            state[item_key] = previous_item(items, item)
+    return state
+
+
+def next_item(items, item):
+    if item is None:
+        return max(items)
+    items = list(sorted(items))
+    i = items.index(item)
+    return items[(i + 1) % len(items)]
+
+
+def previous_item(items, item):
+    if item is None:
+        return min(items)
+    items = list(sorted(items))
+    i = items.index(item)
+    return items[i - 1]
