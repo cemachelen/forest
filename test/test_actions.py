@@ -5,24 +5,24 @@ from forest.actions import SET, ADD, REMOVE
 
 class TestForwardBackward(unittest.TestCase):
     def test_actions_given_next_pressure(self):
-        result = forest.move("pressure", "pressures", "forward")
-        expect = ("MOVE", "pressure", "GIVEN", "pressures", "forward")
+        result = forest.move("pressure", "pressures", "increment")
+        expect = ("MOVE", "pressure", "GIVEN", "pressures", "increment")
         self.assertEqual(expect, result)
 
     def test_actions_given_previous_valid_time(self):
-        result = forest.move("valid_time", "valid_times", "backward")
-        expect = ("MOVE", "valid_time", "GIVEN", "valid_times", "backward")
+        result = forest.move("valid_time", "valid_times", "decrease")
+        expect = ("MOVE", "valid_time", "GIVEN", "valid_times", "decrease")
         self.assertEqual(expect, result)
 
     def test_reducer_given_empty_state(self):
-        action = forest.move("item", "items", "forward")
+        action = forest.move("item", "items", "increment")
         result = forest.reducer({}, action)
         expect = {}
         self.assertEqual(expect, result)
 
     def test_reducer_next_default_value_returns_max(self):
         pressures = [1, 2, 3]
-        action = forest.move("pressure", "pressures", "forward")
+        action = forest.move("pressure", "pressures", "increment")
         result = forest.reducer({"pressures": pressures}, action)
         expect = {
             "pressures": pressures,
@@ -33,7 +33,7 @@ class TestForwardBackward(unittest.TestCase):
     def test_reducer_next_item_given_item_in_items(self):
         item = 2
         items = [1, 2, 3, 4, 5]
-        action = forest.move("item", "items", "forward")
+        action = forest.move("item", "items", "increment")
         result = forest.reducer({"item": item, "items": items}, action)
         expect = {
             "item": 3,
@@ -41,9 +41,9 @@ class TestForwardBackward(unittest.TestCase):
         }
         self.assertEqual(expect, result)
 
-    def test_reducer_backward_default_value_returns_min(self):
+    def test_reducer_decrease_default_value_returns_min(self):
         pressures = [1, 2, 3]
-        action = forest.move("pressure", "pressures", "backward")
+        action = forest.move("pressure", "pressures", "decrease")
         result = forest.reducer({"pressures": pressures}, action)
         expect = {
             "pressures": pressures,

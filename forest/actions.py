@@ -3,9 +3,6 @@
 Module constants prevent string literals from polluting the code base
 and factory methods are more readable, ``action = SET.file_name.to('file.nc')``
 is easier to read than ``action = ("SET", "file_name", "file.nc")``
-
-Or indeed, ``MOVE.pressure.forward``, is probably easier to read
-than ``("MOVE", "pressure", "forward")`` although both generate the same tuple
 """
 
 __all__ = [
@@ -64,7 +61,7 @@ def move(item_key, items_key, direction):
 
     :param item_key: key in state to be moved
     :param items_key: key in state containing multiple values
-    :param direction: either forward/backward
+    :param direction: either increase/decrease
     """
     return ("MOVE", item_key, "GIVEN", items_key, direction)
 

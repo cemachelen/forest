@@ -75,14 +75,14 @@ def move_reducer(state, action):
     if items_key in state:
         item = state.get(item_key, None)
         items = state[items_key]
-        if direction == "forward":
-            state[item_key] = next_item(items, item)
+        if direction == "increment":
+            state[item_key] = increment(items, item)
         else:
-            state[item_key] = previous_item(items, item)
+            state[item_key] = decrement(items, item)
     return state
 
 
-def next_item(items, item):
+def increment(items, item):
     if item is None:
         return max(items)
     items = list(sorted(items))
@@ -90,7 +90,7 @@ def next_item(items, item):
     return items[(i + 1) % len(items)]
 
 
-def previous_item(items, item):
+def decrement(items, item):
     if item is None:
         return min(items)
     items = list(sorted(items))
