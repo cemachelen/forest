@@ -9,23 +9,12 @@ complex model view controller relationships
 
 """
 from collections import OrderedDict
+from forest.observe import Observable
 
 __all__ = [
     "Store",
     "reducer"
 ]
-
-
-class Observable(object):
-    def __init__(self):
-        self.subscribers = []
-
-    def subscribe(self, callback):
-        self.subscribers.append(callback)
-
-    def notify(self, state):
-        for callback in self.subscribers:
-            callback(state)
 
 
 class Store(Observable):

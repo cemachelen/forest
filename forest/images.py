@@ -1,7 +1,7 @@
 import bokeh.models
 import bokeh.layouts
 import numpy as np
-from util import Observable
+from forest.observe import Observable
 from db.util import autolabel
 
 

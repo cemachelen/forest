@@ -13,7 +13,7 @@ import geo
 import colors
 import db
 import parse_args
-from util import Observable
+from observe import Observable
 from db.util import autolabel
 import datetime as dt
 
@@ -120,7 +120,7 @@ def main(argv=None):
         figure.add_layout(colorbar, 'center')
 
     # NOTE: Following code should not depend on SQL database
-    if False:
+    if args.config_file is not None:
         for name, pattern in config.patterns:
             if name not in data.LOADERS:
                 locator = db.Locator(
@@ -220,9 +220,7 @@ def main(argv=None):
     mapper_limits = MapperLimits(image_sources, color_mapper)
 
     menu = [(n, n) for n in data.FILE_DB.names]
-
-    # NOTE: Following code should be replaced by middleware
-    if False:
+    if args.config_file is not None:
         for k, _ in config.patterns:
             menu.append((k, k))
 
@@ -579,7 +577,7 @@ class TimeControls(Observable):
             self.dropdown.value = value
 
     def on_dropdown(self, value):
-        self.announce((self.index, self.step))
+        self.notify((self.index, self.step))
 
     @property
     def index(self):
