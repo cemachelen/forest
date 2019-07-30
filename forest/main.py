@@ -37,12 +37,26 @@ def main(argv=None):
     action_log = control.ActionLog()
     store = control.Store(control.reducer, middlewares=[
         action_log])
+
+    # Search by name or pattern
+    if len(args.files) > 0:
+        search = navigate.FileName()
+    else:
+        search = navigate.Pattern()
+    search.subscribe(store.dispatch)
+    store.subscribe(search.render)
+
+    # Navigate variables, times, pressures
     navigator = navigate.Navigator()
     navigator.subscribe(store.dispatch)
     store.subscribe(navigator.render)
     store.subscribe(lambda s: print(action_log.actions))
+
+    # Initial state
     if len(args.files) > 0:
         store.dispatch(actions.SET.file_names.to(args.files))
+    else:
+        store.dispatch(actions.SET.patterns.to(config.patterns))
 
     # Access latest files
     data.FILE_DB.sync()
@@ -120,7 +134,7 @@ def main(argv=None):
         figure.add_layout(colorbar, 'center')
 
     # NOTE: Following code should not depend on SQL database
-    if args.config_file is not None:
+    if (args.config_file is not None) and (args.database is not None):
         for name, pattern in config.patterns:
             if name not in data.LOADERS:
                 locator = db.Locator(
@@ -272,6 +286,7 @@ def main(argv=None):
         bokeh.models.Panel(
             child=bokeh.layouts.column(
                 bokeh.models.Div(text="Navigate:"),
+                search.drop_down,
                 navigator.layout,
                 bokeh.models.Div(text="Compare:"),
                 bokeh.layouts.row(figure_drop),

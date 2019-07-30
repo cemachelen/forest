@@ -4,8 +4,49 @@ from forest.db.util import autowarn
 
 
 __all__ = [
-    "Navigator"
+    "Navigator",
+    "Pattern",
+    "FileName"
 ]
+
+
+class Pattern(Observable):
+    def __init__(self, drop_down=None):
+        if drop_down is None:
+            drop_down = bokeh.models.Dropdown(label="Model/observation")
+        self.drop_down = drop_down
+        self.drop_down.on_change("value", self.on_change)
+        super().__init__()
+
+    def on_change(self, attr, old, new):
+        self.notify(("SET", "pattern", new))
+
+    def render(self, state):
+        if "pattern" in state:
+            for label, pattern in state["patterns"]:
+                if pattern == state["pattern"]:
+                    self.drop_down.label = label
+                    break
+        if "patterns" in state:
+            self.drop_down.menu = state["patterns"]
+
+
+class FileName(Observable):
+    def __init__(self, drop_down=None):
+        if drop_down is None:
+            drop_down = bokeh.models.Dropdown(label="File(s)")
+        self.drop_down = drop_down
+        self.drop_down.on_change("value", self.on_change)
+        super().__init__()
+
+    def on_change(self, attr, old, new):
+        self.notify(("SET", "file_name", new))
+
+    def render(self, state):
+        if "file_name" in state:
+            self.drop_down.label = state["file_name"]
+        if "file_names" in state:
+            self.drop_down.menu = [(s, s) for s in state["file_names"]]
 
 
 class Navigator(Observable):
@@ -16,8 +57,6 @@ class Navigator(Observable):
             "button": 75
         }
         self.dropdowns = {
-            "pattern": bokeh.models.Dropdown(
-                label="Model/observation"),
             "variable": bokeh.models.Dropdown(
                 label="Variable"),
             "initial_time": bokeh.models.Dropdown(
@@ -53,7 +92,6 @@ class Navigator(Observable):
                 self.dropdowns[key],
                 self.buttons[key]["next"])
         self.layout = bokeh.layouts.column(
-            self.dropdowns["pattern"],
             self.dropdowns["variable"],
             self.rows["initial_time"],
             self.rows["valid_time"],
@@ -62,8 +100,9 @@ class Navigator(Observable):
 
     def render(self, state):
         """Configure dropdown menus"""
+        if "file_names" in state:
+            print("render", state["file_names"])
         for key in [
-                "pattern",
                 "variable",
                 "initial_time",
                 "valid_time",
