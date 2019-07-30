@@ -1,3 +1,4 @@
+import netCDF4
 import bokeh.models
 from forest.observe import Observable
 from forest.db.util import autowarn
@@ -6,7 +7,9 @@ from forest.db.util import autowarn
 __all__ = [
     "Navigator",
     "Pattern",
-    "FileName"
+    "FileName",
+    "SQL",
+    "FileSystem"
 ]
 
 
@@ -122,7 +125,7 @@ class Navigator(Observable):
                 if item_key == "pressure":
                     menu = [(self.hpa(p), str(p)) for p in items]
                 else:
-                    menu = self.menu(items)
+                    menu = [(str(i), str(i)) for i in items]
                 self.dropdowns[item_key].menu = menu
             self.dropdowns[item_key].disabled = disabled
             if item_key in self.buttons:
@@ -140,3 +143,36 @@ class Navigator(Observable):
         def callback():
             self.notify(("MOVE", direction, category))
         return callback
+
+
+class SQL(object):
+    """SQL queries to populate state"""
+    def __call__(self, store):
+        def inner(next_method):
+            def inner_most(action):
+                next_method(action)
+                kind, *rest = action
+                if kind.upper() == "SET":
+                    attr, value = rest
+                    if attr.upper() == "PATTERN":
+                        next_method(("SET", "variables", ["mslp"]))
+            return inner_most
+        return inner
+
+
+class FileSystem(object):
+    """Access file system to populate state"""
+    def __call__(self, store):
+        def inner(next_method):
+            def inner_most(action):
+                next_method(action)
+                kind, *rest = action
+                if kind.upper() == "SET":
+                    attr, value = rest
+                    if attr.upper() == "FILE_NAME":
+                        file_name = value
+                        with netCDF4.Dataset(file_name) as dataset:
+                            variables = [v for v in dataset.variables.keys()]
+                            next_method(("SET", "variables", variables))
+            return inner_most
+        return inner

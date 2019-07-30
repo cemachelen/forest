@@ -33,10 +33,17 @@ def main(argv=None):
             assert os.path.exists(args.database), "{} must exist".format(args.database)
         database = db.Database.connect(args.database)
 
-    # Redux design-pattern
+    # Redux design-pattern: middleware, store, action and reducer
+    middlewares = []
+    if args.database is None:
+        middlewares.append(navigate.FileSystem())
+    else:
+        middlewares.append(navigate.SQL())
+
     action_log = control.ActionLog()
-    store = control.Store(control.reducer, middlewares=[
-        action_log])
+    middlewares.append(action_log)
+
+    store = control.Store(control.reducer, middlewares=middlewares)
 
     # Search by name or pattern
     if len(args.files) > 0:

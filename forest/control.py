@@ -65,24 +65,6 @@ class Database(object):
         return inner
 
 
-class FileSystem(Observable):
-    """Menu system based on file(s) meta-data"""
-    def __init__(self):
-        self.dropdown = bokeh.models.Dropdown()
-        self.dropdown.on_change("value", self.on_file)
-        self.layout = bokeh.layouts.Column(self.dropdown)
-        super().__init__()
-
-    def render(self, state):
-        if "file_name" in state:
-            self.dropdown.label = state["file_name"]
-        if "file_names" in state:
-            self.dropdown.menu = [(name, name) for name in state["file_names"]]
-
-    def on_file(self, attr, old, new):
-        self.notify(actions.SET.file_name.to(new))
-
-
 class Store(Observable):
     def __init__(self, reducer, middlewares=None):
         self.reducer = reducer
