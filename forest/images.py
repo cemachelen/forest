@@ -102,7 +102,7 @@ class Controls(Observable):
         return wrapper
 
     def render(self):
-        self.announce(self.combine(self.models, self.flags))
+        self.notify(self.combine(self.models, self.flags))
 
     @staticmethod
     def combine(models, flags):

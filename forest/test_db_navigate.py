@@ -1,7 +1,7 @@
 import unittest
 import unittest.mock
 import datetime as dt
-from db import Observable
+from observe import Observable
 
 
 class InvalidTime(Exception):
