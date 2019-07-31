@@ -171,6 +171,13 @@ class FileSystem(object):
                         file_name = value
                         with netCDF4.Dataset(file_name) as dataset:
                             variables = [v for v in dataset.variables.keys()]
-                            next_method(("SET", "variables", variables))
+                        next_method(("SET", "variables", variables))
+                    elif attr.upper() == "VARIABLE":
+                        file_name = store.state["file_name"]
+                        with netCDF4.Dataset(file_name) as dataset:
+                            var = dataset.variables["time"]
+                            valid_times = netCDF4.num2date(
+                                var[:], units=var.units)
+                        next_method(("SET", "valid_times", valid_times))
             return inner_most
         return inner
