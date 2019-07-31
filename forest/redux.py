@@ -18,9 +18,11 @@ __all__ = [
 
 
 class Store(Observable):
-    def __init__(self, reducer, middlewares=None):
+    def __init__(self, reducer, middlewares=None, state=None):
         self.reducer = reducer
-        self.state = {}
+        if state is None:
+            state = {}
+        self.state = state
         if middlewares is not None:
             mws = [m(self) for m in middlewares]
             f = self.dispatch
@@ -64,6 +66,8 @@ def move_reducer(state, action):
     if items_key in state:
         item = state.get(item_key, None)
         items = state[items_key]
+        if isinstance(item, str):
+            items = [str(v) for v in items]
         if direction.lower() == "increment":
             state[item_key] = increment(items, item)
         else:

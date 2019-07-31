@@ -40,8 +40,8 @@ def main(argv=None):
     else:
         middlewares.append(navigate.SQL())
 
-    action_log = forest.ActionLog()
-    middlewares.append(action_log)
+    log = forest.ActionLog()
+    middlewares.append(log)
 
     store = forest.Store(forest.reducer, middlewares=middlewares)
 
@@ -57,7 +57,7 @@ def main(argv=None):
     navigator = navigate.Navigator()
     navigator.subscribe(store.dispatch)
     store.subscribe(navigator.render)
-    store.subscribe(lambda s: print(action_log.actions))
+    store.subscribe(log.summary)
 
     # Initial state
     if len(args.files) > 0:

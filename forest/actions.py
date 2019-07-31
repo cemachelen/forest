@@ -4,6 +4,7 @@ Module constants prevent string literals from polluting the code base
 and factory methods are more readable, ``action = SET.file_name.to('file.nc')``
 is easier to read than ``action = ("SET", "file_name", "file.nc")``
 """
+import datetime as dt
 
 __all__ = [
     "ActionLog",
@@ -26,6 +27,19 @@ class ActionLog(object):
                 next_method(action)
             return inner_most
         return inner
+
+    def summary(self, state):
+        """Print a summary of recorded actions"""
+        print("{} {} action(s) logged".format(
+            dt.datetime.now(), len(self.actions)))
+        n = 3
+        if len(self.actions) > n:
+            print("...")
+            for action in self.actions[-n:]:
+                print(action)
+        else:
+            for action in self.actions:
+                print(action)
 
 
 class Assign(object):
