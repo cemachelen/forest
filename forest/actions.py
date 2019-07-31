@@ -15,6 +15,10 @@ __all__ = [
 ]
 
 
+def Set(attr, values):
+    return ("SET", attr, values)
+
+
 class ActionLog(object):
     """Middleware to capture history of actions"""
     def __init__(self):
