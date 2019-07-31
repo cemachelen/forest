@@ -103,8 +103,6 @@ class Navigator(Observable):
 
     def render(self, state):
         """Configure dropdown menus"""
-        if "file_names" in state:
-            print("render", state["file_names"])
         for key in [
                 "variable",
                 "initial_time",
