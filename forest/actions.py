@@ -6,11 +6,26 @@ is easier to read than ``action = ("SET", "file_name", "file.nc")``
 """
 
 __all__ = [
+    "ActionLog",
     "ADD",
     "REMOVE",
     "SET",
     "move"
 ]
+
+
+class ActionLog(object):
+    """Middleware to capture history of actions"""
+    def __init__(self):
+        self.actions = []
+
+    def __call__(self, store):
+        def inner(next_method):
+            def inner_most(action):
+                self.actions.append(action)
+                next_method(action)
+            return inner_most
+        return inner
 
 
 class Assign(object):

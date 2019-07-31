@@ -17,9 +17,9 @@ from observe import Observable
 from db.util import autolabel
 import datetime as dt
 
-import control
 import actions
 import navigate
+import forest
 
 
 def main(argv=None):
@@ -40,10 +40,10 @@ def main(argv=None):
     else:
         middlewares.append(navigate.SQL())
 
-    action_log = control.ActionLog()
+    action_log = forest.ActionLog()
     middlewares.append(action_log)
 
-    store = control.Store(control.reducer, middlewares=middlewares)
+    store = forest.Store(forest.reducer, middlewares=middlewares)
 
     # Search by name or pattern
     if len(args.files) > 0:
