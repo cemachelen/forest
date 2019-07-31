@@ -8,27 +8,23 @@ import datetime as dt
 import netCDF4
 
 
-class TestFileSystem(unittest.TestCase):
+class TestFileName(unittest.TestCase):
     def setUp(self):
-        self.controller = forest.control.FileSystem()
-
-    def test_render(self):
-        self.controller.render({})
-        self.assertIsInstance(self.controller.layout, bokeh.layouts.Column)
+        self.controller = forest.navigate.FileName()
 
     def test_render_given_state(self):
         state = {
             'file_names': ["hello.nc", "goodbye.nc"]
         }
         self.controller.render(state)
-        result = self.controller.dropdown.menu
+        result = self.controller.drop_down.menu
         expect = [("hello.nc", "hello.nc"), ("goodbye.nc", "goodbye.nc")]
         self.assertEqual(expect, result)
 
     def test_render_given_state_without_file_names(self):
         state = {}
         self.controller.render(state)
-        result = self.controller.dropdown.menu
+        result = self.controller.drop_down.menu
         expect = []
         self.assertEqual(expect, result)
 
@@ -37,15 +33,15 @@ class TestFileSystem(unittest.TestCase):
             'file_name': "hello.nc"
         }
         self.controller.render(state)
-        result = self.controller.dropdown.label
+        result = self.controller.drop_down.label
         expect = "hello.nc"
         self.assertEqual(expect, result)
 
-    def test_on_file_emits_action(self):
+    def test_on_change_emits_action(self):
         attr, old, new = None, None, "file.nc"
         listener = unittest.mock.Mock()
         self.controller.subscribe(listener)
-        self.controller.on_file(attr, old, new)
+        self.controller.on_change(attr, old, new)
         action = forest.actions.SET.file_name.to("file.nc")
         listener.assert_called_once_with(action)
 
