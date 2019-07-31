@@ -3,6 +3,7 @@ import forest
 import netCDF4
 import os
 import datetime as dt
+import numpy as np
 
 
 def eida50(dataset, time=1, longitude=1, latitude=1):
@@ -46,13 +47,15 @@ def eida50(dataset, time=1, longitude=1, latitude=1):
 class TestMiddleware(unittest.TestCase):
     def setUp(self):
         self.path = "test-file.nc"
+        self.paths = [self.path]
         self.store = forest.Store(forest.reducer, middlewares=[
             forest.FileSystem()
         ])
 
     def tearDown(self):
-        if os.path.exists(self.path):
-            os.remove(self.path)
+        for path in self.paths:
+            if os.path.exists(path):
+                os.remove(path)
 
     def test_file_system_given_file_sets_variables(self):
         with netCDF4.Dataset(self.path, "w") as dataset:
@@ -73,3 +76,25 @@ class TestMiddleware(unittest.TestCase):
         result = self.store.state["valid_times"]
         expect = times
         self.assertEqual(expect, result)
+
+    def test_file_name_change(self):
+        self.paths = [
+            "test-file-0.nc",
+            "test-file-1.nc",
+        ]
+        first_times = [dt.datetime(2019, 1, 1), dt.datetime(2019, 1, 2)]
+        second_times = [dt.datetime(2019, 1, 3), dt.datetime(2019, 1, 4)]
+        with netCDF4.Dataset(self.paths[0], "w") as dataset:
+            eida50(dataset, time=len(first_times))
+            var = dataset.variables["time"]
+            var[:] = netCDF4.date2num(first_times, units=var.units)
+        with netCDF4.Dataset(self.paths[1], "w") as dataset:
+            eida50(dataset, time=len(second_times))
+            var = dataset.variables["time"]
+            var[:] = netCDF4.date2num(second_times, units=var.units)
+        self.store.dispatch(("SET", "file_name", self.paths[0]))
+        self.store.dispatch(("SET", "variable", "data"))
+        self.store.dispatch(("SET", "file_name", self.paths[1]))
+        result = self.store.state["valid_times"]
+        expect = second_times
+        np.testing.assert_array_equal(expect, result)

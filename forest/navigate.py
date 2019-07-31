@@ -164,20 +164,37 @@ class FileSystem(object):
         def inner(next_method):
             def inner_most(action):
                 next_method(action)
-                kind, *rest = action
+                kind, attr, *rest = action
                 if kind.upper() == "SET":
-                    attr, value = rest
                     if attr.upper() == "FILE_NAME":
-                        file_name = value
-                        with netCDF4.Dataset(file_name) as dataset:
-                            variables = [v for v in dataset.variables.keys()]
-                        next_method(("SET", "variables", variables))
+                        self.set_file_name(action, next_method, store)
                     elif attr.upper() == "VARIABLE":
-                        file_name = store.state["file_name"]
-                        with netCDF4.Dataset(file_name) as dataset:
-                            var = dataset.variables["time"]
-                            valid_times = netCDF4.num2date(
-                                var[:], units=var.units)
-                        next_method(("SET", "valid_times", valid_times))
+                        self.set_variable(action, next_method, store)
             return inner_most
         return inner
+
+    def set_file_name(self, action, next_method, store):
+        _, _, file_name = action
+        values = variables(file_name)
+        next_method(("SET", "variables", values))
+        if "variable" in store.state:
+            values = valid_times(file_name)
+            next_method(("SET", "valid_times", values))
+
+    def set_variable(self, action, next_method, store):
+        file_name = store.state["file_name"]
+        values = valid_times(file_name)
+        next_method(("SET", "valid_times", values))
+
+
+def variables(file_name):
+    with netCDF4.Dataset(file_name) as dataset:
+        values = [v for v in dataset.variables.keys()]
+    return values
+
+
+def valid_times(file_name):
+    with netCDF4.Dataset(file_name) as dataset:
+        var = dataset.variables["time"]
+        values = netCDF4.num2date(var[:], units=var.units)
+    return values
