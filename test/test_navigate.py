@@ -15,6 +15,6 @@ class TestNavigator(unittest.TestCase):
     def test_on_click_forward(self):
         listener = unittest.mock.Mock()
         self.navigator.subscribe(listener)
-        self.navigator.on_click("pressure", "pressures", "increment")()
-        listener.assert_called_once_with(
-            ("MOVE", "pressure", "pressures", "increment"))
+        self.navigator.on_click("pressure", "pressures", "next")()
+        expect = forest.actions.Move("pressure", "pressures").increment
+        listener.assert_called_once_with(expect)

@@ -10,7 +10,7 @@ __all__ = [
     "ADD",
     "REMOVE",
     "SET",
-    "move"
+    "Move"
 ]
 
 
@@ -71,14 +71,23 @@ class Action(object):
     __getitem__ = __getattr__
 
 
-def move(item_key, items_key, direction):
+class Move(object):
     """Helper to represent MOVE action as tuple
 
     :param item_key: key in state to be moved
     :param items_key: key in state containing multiple values
-    :param direction: either increase/decrease
     """
-    return ("MOVE", item_key, "GIVEN", items_key, direction)
+    def __init__(self, item_key, items_key):
+        self.item_key = item_key
+        self.items_key = items_key
+
+    @property
+    def increment(self):
+        return ("MOVE", self.item_key, self.items_key, "INCREMENT")
+
+    @property
+    def decrement(self):
+        return ("MOVE", self.item_key, self.items_key, "DECREMENT")
 
 
 ADD = Action("ADD")

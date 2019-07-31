@@ -2,6 +2,7 @@ import netCDF4
 import bokeh.models
 from forest.observe import Observable
 from forest.db.util import autowarn
+from forest import actions
 
 
 __all__ = [
@@ -77,8 +78,11 @@ class Navigator(Observable):
             dropdown.on_change("value", self.on_change(key))
         self.rows = {}
         self.buttons = {}
-        for key in ["pressure", "valid_time", "initial_time"]:
-            self.buttons[key] = {
+        for item_key, items_key in [
+                ("pressure", "pressures"),
+                ("valid_time", "valid_times"),
+                ("initial_time", "initial_times")]:
+            self.buttons[item_key] = {
                 'next': bokeh.models.Button(
                     label="Next",
                     width=widths["button"]),
@@ -86,14 +90,14 @@ class Navigator(Observable):
                     label="Previous",
                     width=widths["button"]),
             }
-            self.buttons[key]['next'].on_click(
-                self.on_click('next', key))
-            self.buttons[key]['previous'].on_click(
-                self.on_click('previous', key))
-            self.rows[key] = bokeh.layouts.row(
-                self.buttons[key]["previous"],
-                self.dropdowns[key],
-                self.buttons[key]["next"])
+            self.buttons[item_key]['next'].on_click(
+                self.on_click(item_key, items_key, 'next'))
+            self.buttons[item_key]['previous'].on_click(
+                self.on_click(item_key, items_key, 'previous'))
+            self.rows[item_key] = bokeh.layouts.row(
+                self.buttons[item_key]["previous"],
+                self.dropdowns[item_key],
+                self.buttons[item_key]["next"])
         self.layout = bokeh.layouts.column(
             self.dropdowns["variable"],
             self.rows["initial_time"],
@@ -136,10 +140,16 @@ class Navigator(Observable):
             self.notify(("SET", category, new))
         return callback
 
-    def on_click(self, direction, category):
+    def on_click(self, item_key, items_key, direction):
         # Facade: between bokeh callback and FOREST actions
         def callback():
-            self.notify(("MOVE", direction, category))
+            msg = "unknown direction: '{}'".format(direction)
+            assert direction.lower() in ["next", "previous"], msg
+            move = actions.Move(item_key, items_key)
+            if direction == "next":
+                self.notify(move.increment)
+            else:
+                self.notify(move.decrement)
         return callback
 
 

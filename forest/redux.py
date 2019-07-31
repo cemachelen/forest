@@ -60,11 +60,11 @@ def reducer(state, action):
 
 
 def move_reducer(state, action):
-    _, item_key, _, items_key, direction = action
+    _, item_key, items_key, direction = action
     if items_key in state:
         item = state.get(item_key, None)
         items = state[items_key]
-        if direction == "increment":
+        if direction.lower() == "increment":
             state[item_key] = increment(items, item)
         else:
             state[item_key] = decrement(items, item)
