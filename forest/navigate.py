@@ -137,7 +137,7 @@ class Navigator(Observable):
     def on_change(self, category):
         # Facade: between bokeh callback and FOREST actions
         def callback(attr, old, new):
-            self.notify(("SET", category, new))
+            self.notify(set_action(category, new))
         return callback
 
     def on_click(self, item_key, items_key, direction):
@@ -145,12 +145,21 @@ class Navigator(Observable):
         def callback():
             msg = "unknown direction: '{}'".format(direction)
             assert direction.lower() in ["next", "previous"], msg
-            move = actions.Move(item_key, items_key)
-            if direction == "next":
-                self.notify(move.increment)
-            else:
-                self.notify(move.decrement)
+            self.notify(move_action(item_key, items_key, direction))
         return callback
+
+
+def set_action(attr, value):
+    return actions.add_section(actions.Set(attr, value), 'navigate')
+
+
+def move_action(item_key, items_key, direction):
+    move = actions.Move(item_key, items_key)
+    if direction == "next":
+        action = move.increment
+    else:
+        action = move.decrement
+    return actions.add_section(action, 'navigate')
 
 
 class SQL(object):
