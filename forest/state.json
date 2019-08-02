@@ -1,0 +1,45 @@
+{
+    'navigate': {
+        'file_name': '',
+        'file_names': [],
+        'variable': '',
+        'variables': [],
+        'valid_time': '',
+        'valid_times': [],
+        'initial_time': '',
+        'initial_times': [],
+        'pressure': '',
+        'pressures': []
+    },
+    'figure': 3,
+    'opacity': 0.9,
+    'compact': false,
+    'source': [
+       {'name': 'GA6', 'search': 'oper_global*.nc', 'glyph': 'image'},
+       {'name': 'Oper. Africa', 'search': 'oper_africa*.nc', 'glyph': 'image'},
+       {'name': 'RDT', 'search': '*.json', 'glyph': 'polygon'},
+       {'name': 'EIDA50', 'search': 'eida50*.nc', 'glyph': 'image'}
+       {'name': 'EarthNetworks', 'search': '*.txt', 'glyph': 'circle'},
+    ],
+    'layer': [
+        {'source': 1, 'figure': [0, 2]},
+        {'source': 0, 'figure': [1]},
+        {'source': 3, 'figure': [0, 1, 2]},
+    ],
+    'coastline': {
+        'visible': true,
+        'color': 'black'
+    },
+    'colorbar': {
+        'palette': 'Viridis',
+        'palettes': [],
+        'level': 256,
+        'levels': [],
+        'reverse': false,
+        'invisible': false,
+        'invisible_low': null,
+        'low': null,
+        'high': null,
+        'fixed': false
+    }
+}
