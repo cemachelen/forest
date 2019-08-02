@@ -19,7 +19,13 @@ import datetime as dt
 
 import actions
 import navigate
+import component
 import forest
+
+
+def connect(views, store):
+    for view in views:
+        store.subscribe(view)
 
 
 def main(argv=None):
@@ -58,6 +64,10 @@ def main(argv=None):
     navigator.subscribe(store.dispatch)
     store.subscribe(navigator.render)
     store.subscribe(log.summary)
+
+    # Hook up components to state changes
+    views = [component.Component()]
+    connect(views, store)
 
     # Initial state
     if len(args.files) > 0:
