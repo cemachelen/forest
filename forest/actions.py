@@ -11,8 +11,13 @@ __all__ = [
     "ADD",
     "REMOVE",
     "SET",
-    "Move"
+    "Move",
+    "add_section"
 ]
+
+
+def add_section(action, section):
+    return dict(section=section, action=action)
 
 
 def Set(attr, values):

@@ -37,11 +37,31 @@ class Store(Observable):
 
 
 def reducer(state, action):
+    reducers = {
+        "navigate": tuple_reducer
+    }
     state = dict(state)
+    if isinstance(action, dict):
+        section = action["section"]
+        state[section] = reducers[section](
+                state.get(section, {}),
+                action["action"])
+        return state
+    return tuple_reducer(state, action)
+
+
+def tuple_reducer(state, action):
     kind, *rest = action
     if kind.upper() == "SET":
-        key, value = rest
-        state[key] = value
+        if len(rest) == 2:
+            key, value = rest
+            state[key] = value
+        else:
+            section, key, value = rest
+            if section in state:
+                state[section][key] = value
+            else:
+                state[section] = {key: value}
     elif kind.upper() == "MOVE":
         state = move_reducer(state, action)
     elif kind.upper() == "ADD":
