@@ -285,6 +285,7 @@ class WindBarbs(ActiveViewer):
 
 
 class FSLoader(object):
+    """Load ColumnDataSource.data from file on disk"""
     def __init__(self):
         self.empty_image = {
             "x": [],
@@ -300,10 +301,19 @@ class FSLoader(object):
         }
 
     def load(self, state):
+        props = ["file_name", "variable", "valid_time"]
+        state = {
+            k: state[k] for k in props if k in state
+        }
+        print(state)
         return self.empty_image
+
+    def valid(self, state):
+        return False
 
 
 class DBLoader(object):
+    """Load ColumnDataSource.data from SQL database"""
     def __init__(self, name, pattern, locator):
         self.name = name
         self.pattern = pattern
