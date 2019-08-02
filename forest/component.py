@@ -1,4 +1,9 @@
 """Template for how to build components"""
+import bokeh.models
+
+
+def restrict(state, props):
+    return {k: state[k] for k in props if k in state}
 
 
 class Component(object):
@@ -6,12 +11,17 @@ class Component(object):
         self.render(state)
 
     def render(self, state):
-        state = self.select(state, [
+        state = restrict(state, [
             "file_name",
             "variable",
             "valid_time"])
         print(state)
 
-    @staticmethod
-    def select(state, props):
-        return {k: state[k] for k in props if k in state}
+
+class Message(object):
+    def __init__(self):
+        self.div = bokeh.models.Div()
+
+    def __call__(self, state):
+        state = restrict(state, ["file_name"])
+        self.div.text = state.get("file_name", "")

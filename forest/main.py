@@ -66,7 +66,10 @@ def main(argv=None):
     store.subscribe(log.summary)
 
     # Hook up components to state changes
-    views = [component.Component()]
+    msg = component.Message()
+    views = [
+        component.Component(),
+        msg]
     connect(views, store)
 
     # Initial state
@@ -307,7 +310,8 @@ def main(argv=None):
                 navigator.layout,
                 bokeh.models.Div(text="Compare:"),
                 bokeh.layouts.row(figure_drop),
-                image_controls.column),
+                image_controls.column,
+                msg.div),
             title="Control"
         ),
         bokeh.models.Panel(
