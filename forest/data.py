@@ -284,6 +284,25 @@ class WindBarbs(ActiveViewer):
         }
 
 
+class FSLoader(object):
+    def __init__(self):
+        self.empty_image = {
+            "x": [],
+            "y": [],
+            "dw": [],
+            "dh": [],
+            "image": [],
+            "name": [],
+            "valid": [],
+            "initial": [],
+            "length": [],
+            "level": []
+        }
+
+    def load(self, state):
+        return self.empty_image
+
+
 class DBLoader(object):
     def __init__(self, name, pattern, locator):
         self.name = name

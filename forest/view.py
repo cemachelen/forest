@@ -1,10 +1,8 @@
 import bokeh.models
-import geo
 
 
-class UMView(object):
-    def __init__(self, loader, color_mapper):
-        self.loader = loader
+class Image(object):
+    def __init__(self, color_mapper, hover_tool=None):
         self.color_mapper = color_mapper
         self.source = bokeh.models.ColumnDataSource({
                 "x": [],
@@ -12,20 +10,11 @@ class UMView(object):
                 "dw": [],
                 "dh": [],
                 "image": []})
+        self.hover_tool = hover_tool
 
-    def render(self, state):
-        self.source.data = self.loader.image(state)
-
-    def add_figure(self, figure):
-        renderer = figure.image(
-                x="x",
-                y="y",
-                dw="dw",
-                dh="dh",
-                image="image",
-                source=self.source,
-                color_mapper=self.color_mapper)
-        tool = bokeh.models.HoverTool(
+    @classmethod
+    def unified_model(cls):
+        hover_tool = bokeh.models.HoverTool(
                 renderers=[renderer],
                 tooltips=[
                     ("Name", "@name"),
@@ -38,71 +27,20 @@ class UMView(object):
                     'valid': 'datetime',
                     'initial': 'datetime'
                 })
-        figure.add_tools(tool)
+        return cls(color_mapper, hover_tool)
+
+    def render(self, data):
+        self.source.data = data
+
+    def add_figure(self, figure):
+        renderer = figure.image(
+                x="x",
+                y="y",
+                dw="dw",
+                dh="dh",
+                image="image",
+                source=self.source,
+                color_mapper=self.color_mapper)
+        if self.hover_tool is not None:
+            figure.add_tools(self.hover_tool)
         return renderer
-
-
-class Image(object):
-    pass
-
-
-class Barbs(object):
-    pass
-
-
-class GPMView(object):
-    def __init__(self, loader, color_mapper):
-        self.loader = loader
-        self.color_mapper = color_mapper
-        self.empty = {
-                "lons": [],
-                "lats": [],
-                "x": [],
-                "y": [],
-                "dw": [],
-                "dh": [],
-                "image": []}
-        self.source = bokeh.models.ColumnDataSource(self.empty)
-
-    def render(self, variable, pressure, itime):
-        if variable != "precipitation_flux":
-            self.source.data = self.empty
-        else:
-            self.source.data = self.loader.image(itime)
-
-    def add_figure(self, figure):
-        return figure.image(
-                x="x",
-                y="y",
-                dw="dw",
-                dh="dh",
-                image="image",
-                source=self.source,
-                color_mapper=self.color_mapper)
-
-class EIDA50(object):
-    def __init__(self, loader, color_mapper):
-        self.loader = loader
-        self.color_mapper = color_mapper
-        self.empty = {
-                "x": [],
-                "y": [],
-                "dw": [],
-                "dh": [],
-                "image": []}
-        self.source = bokeh.models.ColumnDataSource(
-                self.empty)
-
-    def image(self, time):
-        print("EIDA50: {}".format(time))
-        self.source.data = self.loader.image(time)
-
-    def add_figure(self, figure):
-        return figure.image(
-                x="x",
-                y="y",
-                dw="dw",
-                dh="dh",
-                image="image",
-                source=self.source,
-                color_mapper=self.color_mapper)

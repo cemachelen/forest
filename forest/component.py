@@ -23,6 +23,11 @@ class Message(object):
         self.div = bokeh.models.Div()
 
     def __call__(self, state):
-        state = state.get('navigate', {})
         state = restrict(state, ["file_name"])
         self.div.text = state.get("file_name", "")
+
+
+def image(render, load):
+    def callback(state):
+        render(load(state))
+    return callback

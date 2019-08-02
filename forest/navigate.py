@@ -150,7 +150,7 @@ class Navigator(Observable):
 
 
 def set_action(attr, value):
-    return actions.add_section(actions.Set(attr, value), 'navigate')
+    return actions.Set(attr, value)
 
 
 def move_action(item_key, items_key, direction):
@@ -159,7 +159,7 @@ def move_action(item_key, items_key, direction):
         action = move.increment
     else:
         action = move.decrement
-    return actions.add_section(action, 'navigate')
+    return action
 
 
 class SQL(object):

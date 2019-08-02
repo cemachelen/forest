@@ -28,6 +28,12 @@ def connect(views, store):
         store.subscribe(view)
 
 
+def compose(f, g):
+    def method(x):
+        return f(g(x))
+    return method
+
+
 def main(argv=None):
     args = parse_args.parse_args(argv)
     if args.config_file is not None:
@@ -67,10 +73,17 @@ def main(argv=None):
 
     # Hook up components to state changes
     msg = component.Message()
-    views = [
-        component.Component(),
-        msg]
-    connect(views, store)
+    viewer = view.Image.unified_model(color_mapper)
+    for figure in figures:
+        renderer = viewer.add_figure(figure)
+    if True:
+        loader = data.FSLoader()
+    else:
+        loader = data.DBLoader()
+    components = [
+            compose(viewer.render, loader.load)
+            msg]
+    connect(components, store)
 
     # Initial state
     if len(args.files) > 0:
@@ -551,81 +564,6 @@ class Artist(object):
         for name in self.visible_state:
             viewer = self.viewers[name]
             viewer.render(self.state)
-
-
-class TimeControls(Observable):
-    def __init__(self, steps):
-        self.steps = steps
-        self.labels = ["T{:+}".format(int(s))
-                for s in self.steps]
-        self.plus = bokeh.models.Button(label="+", width=80)
-        self.plus.on_click(self.on_plus)
-        self.minus = bokeh.models.Button(label="-", width=80)
-        self.minus.on_click(self.on_minus)
-        self.dropdown = bokeh.models.Dropdown(
-                label="Time step",
-                menu=list(zip(self.labels, self.labels)),
-                width=80)
-        autolabel(self.dropdown)
-        self.dropdown.on_click(self.on_dropdown)
-        sizing_mode = "fixed"
-        self.layout = bokeh.layouts.row(
-                bokeh.layouts.column(self.minus, width=90,
-                    sizing_mode=sizing_mode),
-                bokeh.layouts.column(self.dropdown, width=100,
-                    sizing_mode=sizing_mode),
-                bokeh.layouts.column(self.plus, width=90,
-                    sizing_mode=sizing_mode),
-                width=300)
-        super().__init__()
-
-    def set_times(self, times):
-        self.steps = self.as_steps(times)
-        self.labels = ["T{:+}".format(int(s))
-                for s in self.steps]
-        self.dropdown.menu = list(zip(
-            self.labels, self.labels))
-
-    @staticmethod
-    def as_steps(times):
-        t0 = times[0]
-        return [(t - t0).total_seconds() / (60 * 60)
-                for t in times]
-
-    def on_plus(self):
-        if self.dropdown.value is None:
-            self.dropdown.value = self.labels[0]
-            return
-        if self.index == (len(self.labels) - 1):
-            return
-        else:
-            value = self.labels[self.index + 1]
-            self.dropdown.value = value
-
-    def on_minus(self):
-        if self.dropdown.value is None:
-            self.dropdown.value = self.labels[0]
-            return
-        if self.index == 0:
-            return
-        else:
-            value = self.labels[self.index - 1]
-            self.dropdown.value = value
-
-    def on_dropdown(self, value):
-        self.notify((self.index, self.step))
-
-    @property
-    def index(self):
-        if self.dropdown.value is None:
-            return
-        return self.labels.index(self.dropdown.value)
-
-    @property
-    def step(self):
-        if self.index is None:
-            return
-        return self.steps[self.index]
 
 
 class MapperLimits(object):
