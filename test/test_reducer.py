@@ -61,23 +61,3 @@ class TestForestReducer(unittest.TestCase):
         result = store.state["valid_times"]
         expect = ["2019-01-01 00:00:00", "2019-01-02 00:00:00"]
         self.assertEqual(expect, result)
-
-
-class TestNavigationReducer(unittest.TestCase):
-    def test_app_reducer(self):
-        action = forest.add_section(("SET", "file_name", "file.nc"), "navigate")
-        result = forest.reducer({}, action)
-        expect = {
-            "navigate": {
-                "file_name": "file.nc"
-            }
-        }
-        self.assertEqual(expect, result)
-
-    def test_navigate_reducer(self):
-        action = ("SET", "file_name", "file.nc")
-        result = forest.reducer({}, action)
-        expect = {
-            "file_name": "file.nc"
-        }
-        self.assertEqual(expect, result)

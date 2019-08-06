@@ -12,12 +12,20 @@ __all__ = [
     "REMOVE",
     "SET",
     "Move",
-    "add_section"
+    "prepend"
 ]
 
 
-def add_section(action, section):
-    return dict(section=section, action=action)
+def prepend(notify, key):
+    """Decorate notify action(s) with keyword
+
+    Useful for nesting reducers and state such
+    that underlying views and action creators are
+    unaware of how the state tree is organised
+    """
+    def wrapper(action):
+        notify((key, *action))
+    return wrapper
 
 
 def Set(attr, values):

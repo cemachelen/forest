@@ -81,7 +81,7 @@ def main(argv=None):
     else:
         loader = data.DBLoader()
     components = [
-            compose(viewer.render, loader.load)
+            compose(viewer.render, loader.load),
             msg]
     connect(components, store)
 
