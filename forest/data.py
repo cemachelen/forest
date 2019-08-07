@@ -302,14 +302,13 @@ class FSLoader(object):
 
     def load(self, state):
         props = ["file_name", "variable", "valid_time"]
-        state = {
-            k: state[k] for k in props if k in state
-        }
-        print(state)
-        return self.empty_image
-
-    def valid(self, state):
-        return False
+        for prop in props:
+            if prop not in state:
+                return self.empty_image
+        file_name = state["file_name"]
+        variable = state["variable"]
+        valid_time = state["valid_time"]
+        return load_image(file_name, variable, 0, 0)
 
 
 class DBLoader(object):
