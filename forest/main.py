@@ -133,6 +133,8 @@ def main(argv=None):
             msg]
     connect(components, store)
 
+    image_sources = [viewer.source]
+
     # Initial state
     if len(args.files) > 0:
         store.dispatch(actions.set_item("file_names", args.files))
@@ -194,10 +196,10 @@ def main(argv=None):
     for _, r in artist.renderers.items():
         renderers += r
 
-    image_sources = []
-    for name, viewer in artist.viewers.items():
-        if isinstance(viewer, (view.UMView, view.GPMView, view.EIDA50)):
-            image_sources.append(viewer.source)
+    # image_sources = []
+    # for name, viewer in artist.viewers.items():
+    #     if isinstance(viewer, (view.UMView, view.GPMView, view.EIDA50)):
+    #         image_sources.append(viewer.source)
 
     # Lakes
     for figure in figures:
