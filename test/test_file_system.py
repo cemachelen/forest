@@ -60,8 +60,8 @@ class TestMiddleware(unittest.TestCase):
     def test_file_system_given_file_sets_variables(self):
         with netCDF4.Dataset(self.path, "w") as dataset:
             eida50(dataset)
-        self.store.dispatch(("SET", "file_name", self.path))
-        result = self.store.state["variables"]
+        self.store.dispatch(("navigate", "set", "file_name", self.path))
+        result = self.store.state["navigate"]["variables"]
         expect = ['time', 'longitude', 'latitude', 'data']
         self.assertEqual(expect, result)
 
@@ -71,9 +71,9 @@ class TestMiddleware(unittest.TestCase):
             eida50(dataset, time=len(times))
             var = dataset.variables["time"]
             var[:] = netCDF4.date2num(times, units=var.units)
-        self.store.dispatch(("SET", "file_name", self.path))
-        self.store.dispatch(("SET", "variable", "data"))
-        result = self.store.state["valid_times"]
+        self.store.dispatch(("navigate", "set", "file_name", self.path))
+        self.store.dispatch(("navigate", "set", "variable", "data"))
+        result = self.store.state["navigate"]["valid_times"]
         expect = times
         self.assertEqual(expect, result)
 
@@ -92,9 +92,9 @@ class TestMiddleware(unittest.TestCase):
             eida50(dataset, time=len(second_times))
             var = dataset.variables["time"]
             var[:] = netCDF4.date2num(second_times, units=var.units)
-        self.store.dispatch(("SET", "file_name", self.paths[0]))
-        self.store.dispatch(("SET", "variable", "data"))
-        self.store.dispatch(("SET", "file_name", self.paths[1]))
-        result = self.store.state["valid_times"]
+        self.store.dispatch(("navigate", "set", "file_name", self.paths[0]))
+        self.store.dispatch(("navigate", "set", "variable", "data"))
+        self.store.dispatch(("navigate", "set", "file_name", self.paths[1]))
+        result = self.store.state["navigate"]["valid_times"]
         expect = second_times
         np.testing.assert_array_equal(expect, result)

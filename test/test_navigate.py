@@ -66,7 +66,7 @@ class TestActionCreator(unittest.TestCase):
         state = {}
         for action in [
                 ('navigate', 'set', 'hello', 'world'),
-                ('preset', 'set', 'hello', 'world')]:
+                ('preset', 'add', 'default', {'x': 'y'})]:
             state = reducer(state, action)
         result = state
         expect = {
@@ -74,7 +74,12 @@ class TestActionCreator(unittest.TestCase):
                 'hello': 'world'
             },
             'preset': {
-                'hello': 'world'
+                'presets': [
+                    {
+                        'name': 'default',
+                        'x': 'y'
+                    }
+                ]
             }
         }
         self.assertEqual(expect, result)

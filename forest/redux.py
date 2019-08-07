@@ -10,6 +10,7 @@ complex model view controller relationships
 """
 from collections import OrderedDict
 from forest.observe import Observable
+from forest import reducers
 
 __all__ = [
     "Store",
@@ -54,76 +55,7 @@ def combine_reducers(**reducers):
     return reducer
 
 
-def reducer(state, action):
-    reducers = {
-        "navigate": tuple_reducer
-    }
-    state = dict(state)
-    if isinstance(action, dict):
-        section = action["section"]
-        state[section] = reducers[section](
-                state.get(section, {}),
-                action["action"])
-        return state
-    return tuple_reducer(state, action)
-
-
-def tuple_reducer(state, action):
-    kind, *rest = action
-    if kind.upper() == "SET":
-        if len(rest) == 2:
-            key, value = rest
-            state[key] = value
-        else:
-            section, key, value = rest
-            if section in state:
-                state[section][key] = value
-            else:
-                state[section] = {key: value}
-    elif kind.upper() == "MOVE":
-        state = move_reducer(state, action)
-    elif kind.upper() == "ADD":
-        category, name, settings = rest
-        presets = state.get("presets", [])
-        tree = OrderedDict({p["name"]: p for p in presets})
-        data = dict(settings)
-        data["name"] = name
-        tree[name] = data
-        state["presets"] = list(tree.values())
-    elif kind.upper() == "REMOVE":
-        category, name = rest
-        state["presets"] = [
-            item for item in state["presets"]
-            if item["name"] != name
-        ]
-    return state
-
-
-def move_reducer(state, action):
-    _, item_key, items_key, direction = action
-    if items_key in state:
-        item = state.get(item_key, None)
-        items = state[items_key]
-        if isinstance(item, str):
-            items = [str(v) for v in items]
-        if direction.lower() == "increment":
-            state[item_key] = increment(items, item)
-        else:
-            state[item_key] = decrement(items, item)
-    return state
-
-
-def increment(items, item):
-    if item is None:
-        return max(items)
-    items = list(sorted(items))
-    i = items.index(item)
-    return items[(i + 1) % len(items)]
-
-
-def decrement(items, item):
-    if item is None:
-        return min(items)
-    items = list(sorted(items))
-    i = items.index(item)
-    return items[i - 1]
+reducer = combine_reducers(**{
+    'navigate': reducers.navigate,
+    'preset': reducers.preset
+})

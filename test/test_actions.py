@@ -4,26 +4,22 @@ from forest.actions import SET, ADD, REMOVE
 
 
 class TestForwardBackward(unittest.TestCase):
-    def test_actions_given_next_pressure(self):
-        result = forest.Move("pressure", "pressures").increment
-        expect = ("MOVE", "pressure", "pressures", "INCREMENT")
-        self.assertEqual(expect, result)
-
-    def test_actions_given_previous_valid_time(self):
-        result = forest.Move("valid_time", "valid_times").decrement
-        expect = ("MOVE", "valid_time", "valid_times", "DECREMENT")
-        self.assertEqual(expect, result)
-
     def test_reducer_given_empty_state(self):
-        action = forest.Move("item", "items").increment
+        action = ("navigate", "move", "item", "items", "increment")
         result = forest.reducer({}, action)
-        expect = {}
+        expect = {
+            "navigate": {},
+            "preset": {}
+        }
         self.assertEqual(expect, result)
 
     def test_reducer_next_default_value_returns_max(self):
         pressures = [1, 2, 3]
-        action = forest.Move("pressure", "pressures").increment
-        result = forest.reducer({"pressures": pressures}, action)
+        action = ("navigate", "move", "pressure", "pressures", "increment")
+        state = forest.reducer({
+                "navigate": {"pressures": pressures}
+            }, action)
+        result = state["navigate"]
         expect = {
             "pressures": pressures,
             "pressure": 3
@@ -33,8 +29,15 @@ class TestForwardBackward(unittest.TestCase):
     def test_reducer_next_item_given_item_in_items(self):
         item = 2
         items = [1, 2, 3, 4, 5]
-        action = forest.Move("item", "items").increment
-        result = forest.reducer({"item": item, "items": items}, action)
+        action = ("navigate", "move", "item", "items", "increment")
+        state = {
+            "navigate": {
+                "item": item,
+                "items": items
+            }
+        }
+        state = forest.reducer(state, action)
+        result = state["navigate"]
         expect = {
             "item": 3,
             "items": items
@@ -43,8 +46,14 @@ class TestForwardBackward(unittest.TestCase):
 
     def test_reducer_decrease_default_value_returns_min(self):
         pressures = [1, 2, 3]
-        action = forest.Move("pressure", "pressures").decrement
-        result = forest.reducer({"pressures": pressures}, action)
+        action = ("navigate", "move", "pressure", "pressures", "decrement")
+        state = {
+            "navigate": {
+                "pressures": pressures
+            }
+        }
+        state = forest.reducer(state, action)
+        result = state["navigate"]
         expect = {
             "pressures": pressures,
             "pressure": 1
@@ -54,67 +63,44 @@ class TestForwardBackward(unittest.TestCase):
 
 class TestPreset(unittest.TestCase):
     """Hypothetical implementation of presets as data"""
-    def test_set_current_preset_action(self):
-        result = SET.preset.to({
-            "name": "Custom",
-            "palette": "Viridis"
-        })
-        expect = ("SET", "preset", {"name": "Custom", "palette": "Viridis"})
-        self.assertEqual(expect, result)
-
-    def test_set_current_preset_reducer(self):
-        action = SET.preset.to({
-            "name": "Custom",
-            "palette": "Viridis"
-        })
-        result = forest.reducer({}, action)
-        expect = {
-            "preset": {
-                "name": "Custom",
-                "palette": "Viridis"
-            }
-        }
-        self.assertEqual(expect, result)
-
-    def test_add_preset_action(self):
-        result = ADD.preset.by_name("Default", {
-            "palette": "Viridis"
-        })
-        expect = ("ADD", "preset", "Default", {"palette": "Viridis"})
-        self.assertEqual(expect, result)
-
     def test_add_preset_reducer(self):
-        result = forest.reducer({}, ADD.preset.by_name("Hello", {
-            "palette": "Viridis"
-        }))
+        action = ("preset", "add", {"name": "Custom", "palette": "Viridis"})
+        result = forest.reducer({}, action)["preset"]
         expect = {
-            "presets": [{
-                "name": "Hello",
-                "palette": "Viridis"
-            }]
+            "presets": [
+                {
+                    "name": "Custom",
+                    "palette": "Viridis"
+                }
+            ]
         }
         self.assertEqual(expect, result)
 
     def test_remove_preset(self):
+        action = ("preset", "remove", "Default")
         result = forest.reducer({
-            "presets": [
-                {
-                    "name": "Default",
-                    "min": 0
-                }
-            ]
-        }, REMOVE.preset.by_name("Default"))
+            "preset": {
+                "presets": [
+                    {
+                        "name": "Default",
+                        "min": 0
+                    }
+                ]
+            }
+        }, action)
         expect = {
-            "presets": []
+            "preset": {
+                "presets": []
+            }
         }
         self.assertEqual(expect, result)
 
     def test_add_preset_twice(self):
         state = {}
-        state = forest.reducer(state, ADD.preset.by_name("Hello", {
+        state = forest.reducer(state, ("preset", "add", "Hello", {
             "palette": "Viridis"
         }))
-        state = forest.reducer(state, ADD.preset.by_name("Hello", {
+        state = forest.reducer(state, ("preset", "add", "Hello", {
             "palette": "Blues"
         }))
         result = state
@@ -128,28 +114,16 @@ class TestPreset(unittest.TestCase):
 
     def test_add_different_presets(self):
         state = {}
-        state = forest.reducer(state, ADD.preset.by_name("A", {
+        state = forest.reducer(state, ("preset", "add", "A", {
             "palette": "Viridis"
         }))
-        state = forest.reducer(state, ADD.preset.by_name("B", {
+        state = forest.reducer(state, ("preset", "add", "B", {
             "palette": "Blues"
         }))
-        result = state
+        result = state["preset"]
         expect = {
             "presets": [
                 {"name": "A", "palette": "Viridis"},
                 {"name": "B", "palette": "Blues"}]
         }
-        self.assertEqual(expect, result)
-
-
-class TestActions(unittest.TestCase):
-    def test_set_pressure(self):
-        result = SET.pressure.to(1000.)
-        expect = ("SET", "pressure", 1000.)
-        self.assertEqual(expect, result)
-
-    def test_move_item_given_items_forward(self):
-        result = forest.Move("pressure", "pressures").increment
-        expect = ("MOVE", "pressure", "pressures", "INCREMENT")
         self.assertEqual(expect, result)

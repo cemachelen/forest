@@ -13,12 +13,12 @@ class Convert(object):
     def __call__(self, store):
         def inner(next_method):
             def inner_most(action):
-                kind, *rest = action
-                if kind == "SET":
+                section, kind, *rest = action
+                if kind.lower() == "set":
                     attr, values = rest
                     if attr in self.attrs:
                         values = self.convert(values)
-                        next_method(forest.actions.Set(attr, values))
+                        next_method((section, 'set', attr, values))
                     else:
                         next_method(action)
                 else:
@@ -40,12 +40,14 @@ class TestForestReducer(unittest.TestCase):
             dt.datetime(2019, 1, 4)
         ]
         store = forest.Store(forest.reducer, state={
-            "valid_time": "2019-01-02 00:00:00",
-            "valid_times": valid_times
+            "navigate": {
+                "valid_time": "2019-01-02 00:00:00",
+                "valid_times": valid_times
+            }
         })
-        action = forest.actions.Move("valid_time", "valid_times").increment
+        action = ("navigate", "MOVE", "valid_time", "valid_times", "INCREMENT")
         store.dispatch(action)
-        result = store.state["valid_time"]
+        result = store.state["navigate"]["valid_time"]
         expect = "2019-01-03 00:00:00"
         self.assertEqual(expect, result)
 
@@ -56,8 +58,8 @@ class TestForestReducer(unittest.TestCase):
         ]
         middleware = Convert(["valid_times"], to_string)
         store = forest.Store(forest.reducer, middlewares=[middleware])
-        action = forest.actions.Set("valid_times", valid_times)
+        action = ("navigate", "set", "valid_times", valid_times)
         store.dispatch(action)
-        result = store.state["valid_times"]
+        result = store.state["navigate"]["valid_times"]
         expect = ["2019-01-01 00:00:00", "2019-01-02 00:00:00"]
         self.assertEqual(expect, result)

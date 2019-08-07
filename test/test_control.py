@@ -55,27 +55,29 @@ class TestStore(unittest.TestCase):
         self.assertEqual(expect, result)
 
     def test_dispatch_given_action_updates_state(self):
-        action = forest.actions.SET.file_name.to("file.nc")
+        action = ('navigate', 'set', 'file_name', 'file.nc')
         self.store.dispatch(action)
-        result = self.store.state
+        result = self.store.state['navigate']
         expect = {
             "file_name": "file.nc"
         }
         self.assertEqual(expect, result)
 
     def test_store_state_is_observable(self):
-        action = forest.actions.SET.file_name.to("file.nc")
+        def reducer(state, action):
+            return "STATE"
+        store = forest.Store(reducer)
         listener = unittest.mock.Mock()
-        self.store.subscribe(listener)
-        self.store.dispatch(action)
-        expect = {"file_name": "file.nc"}
+        store.subscribe(listener)
+        store.dispatch("ACTION")
+        expect = "STATE"
         listener.assert_called_once_with(expect)
 
 
 class TestReducer(unittest.TestCase):
     def test_reducer(self):
-        action = forest.actions.SET.file_name.to("file.nc")
-        result = forest.reducer({}, action)
+        action = ('navigate', 'set', 'file_name', 'file.nc')
+        result = forest.reducer({}, action)['navigate']
         expect = {
             "file_name": "file.nc"
         }
@@ -83,46 +85,46 @@ class TestReducer(unittest.TestCase):
 
     def test_reducer_given_set_file_names_action(self):
         files = ["a.nc", "b.nc"]
-        action = forest.actions.SET.file_names.to(files)
-        result = forest.reducer({}, action)
+        action = ('navigate', 'set', 'file_names', files)
+        result = forest.reducer({}, action)['navigate']
         expect = {
             "file_names": files
         }
         self.assertEqual(expect, result)
 
     def test_reducer_given_set_variable(self):
-        action = forest.actions.SET.variable.to("air_temperature")
-        result = forest.reducer({}, action)
+        action = ('navigate', 'set', 'variable', 'air_temperature')
+        result = forest.reducer({}, action)['navigate']
         expect = {
             "variable": "air_temperature"
         }
         self.assertEqual(expect, result)
 
     def test_reducer_given_set_pressures(self):
-        action = forest.actions.SET.pressures.to([1000., 950.])
+        action = ('navigate', 'set', 'pressures', [1000., 950.])
         self.check(action, "pressures", [1000., 950.])
 
     def test_reducer_given_set_pressure(self):
-        action = forest.actions.SET.pressure.to(850.)
+        action = ('navigate', 'set', 'pressure', 850.)
         self.check(action, "pressure", 850.)
 
     def test_reducer_given_set_initial_time(self):
         value = "2019-01-01 00:00:00"
-        action = forest.actions.SET.initial_time.to(value)
+        action = ('navigate', 'set', 'initial_time', value)
         self.check(action, "initial_time", value)
 
     def test_reducer_given_set_initial_times(self):
         value = ["2019-01-01 00:00:00", "2019-01-01 12:00:00"]
-        action = forest.actions.SET.initial_times.to(value)
+        action = ('navigate', 'set', 'initial_times', value)
         self.check(action, "initial_times", value)
 
     def test_reducer_given_set_valid_time(self):
         value = "2019-01-01 00:00:00"
-        action = forest.actions.SET.valid_time.to(value)
+        action = ('navigate', 'set', 'valid_time', value)
         self.check(action, "valid_time", value)
 
     def check(self, action, attr, value):
-        result = forest.reducer({}, action)
+        result = forest.reducer({}, action)['navigate']
         expect = {
             attr: value
         }
