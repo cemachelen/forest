@@ -13,7 +13,6 @@ import geo
 import colors
 import db
 import parse_args
-from observe import Observable
 from db.util import autolabel
 import datetime as dt
 
