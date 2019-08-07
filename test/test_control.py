@@ -41,7 +41,8 @@ class TestFileName(unittest.TestCase):
         listener = unittest.mock.Mock()
         self.controller.subscribe(listener)
         self.controller.on_change(attr, old, new)
-        action = forest.actions.SET.file_name.to("file.nc")
+        action = forest.actions.set_item(
+                "file_name", "file.nc")
         listener.assert_called_once_with(action)
 
 

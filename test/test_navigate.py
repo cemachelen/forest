@@ -16,20 +16,11 @@ class TestNavigator(unittest.TestCase):
         listener = unittest.mock.Mock()
         self.navigator.subscribe(listener)
         self.navigator.on_click("pressure", "pressures", "next")()
-        expect = forest.actions.Move("pressure", "pressures").increment
+        expect = forest.actions.next_item("pressure", "pressures")
         listener.assert_called_once_with(expect)
 
 
 class TestActionCreator(unittest.TestCase):
-    def test_decouple_actions_from_navigator(self):
-        listener = unittest.mock.Mock()
-        navigator = forest.Navigator()
-        navigator.notify = forest.actions.prepend(navigator.notify, 'navigate')
-        navigator.subscribe(listener)
-        navigator.on_click("pressure", "pressures", "next")()
-        expect = ("navigate", "MOVE", "pressure", "pressures", "INCREMENT")
-        listener.assert_called_once_with(expect)
-
     def test_combine_reducers(self):
         reducer = forest.combine_reducers(navigate=forest.reducers.navigate)
         result = reducer({}, ('navigate', 'set', 'hello', 'world'))

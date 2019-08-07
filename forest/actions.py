@@ -8,28 +8,24 @@ import datetime as dt
 
 __all__ = [
     "ActionLog",
-    "ADD",
-    "REMOVE",
-    "SET",
-    "Move",
-    "prepend"
 ]
 
 
-def prepend(notify, key):
-    """Decorate notify action(s) with keyword
-
-    Useful for nesting reducers and state such
-    that underlying views and action creators are
-    unaware of how the state tree is organised
-    """
-    def wrapper(action):
-        notify((key, *action))
-    return wrapper
+SET_ITEM = "SET_ITEM"
+NEXT_ITEM = "NEXT_ITEM"
+PREVIOUS_ITEM = "PREVIOUS_ITEM"
 
 
-def Set(attr, values):
-    return ("SET", attr, values)
+def set_item(key, value):
+    return {**locals(), **dict(kind=SET_ITEM)}
+
+
+def next_item(item_key, items_key):
+    return {**locals(), **dict(kind=NEXT_ITEM)}
+
+
+def previous_item(item_key, items_key):
+    return {**locals(), **dict(kind=PREVIOUS_ITEM)}
 
 
 class ActionLog(object):
@@ -57,70 +53,3 @@ class ActionLog(object):
         else:
             for action in self.actions:
                 print(action)
-
-
-class Assign(object):
-    def __init__(self, props):
-        self._props = props
-
-    def to(self, value):
-        return self._props + (value,)
-
-
-class Append(object):
-    def __init__(self, props):
-        self._props = props
-
-    def by_name(self, name, value):
-        return self._props + (name, value)
-
-
-class Remove(object):
-    def __init__(self, props):
-        self._props = props
-
-    def by_name(self, name):
-        return self._props + (name,)
-
-
-class Action(object):
-    def __init__(self, verb):
-        self._verb = verb
-
-    def __getattr__(self, key):
-        if self._verb == "SET":
-            return Assign((self._verb, key))
-        elif self._verb == "MOVE":
-            return Motion((self._verb, key))
-        elif self._verb == "ADD":
-            return Append((self._verb, key))
-        elif self._verb == "REMOVE":
-            return Remove((self._verb, key))
-        else:
-            raise Exception("Unknown verb: {}".format(self._verb))
-
-    __getitem__ = __getattr__
-
-
-class Move(object):
-    """Helper to represent MOVE action as tuple
-
-    :param item_key: key in state to be moved
-    :param items_key: key in state containing multiple values
-    """
-    def __init__(self, item_key, items_key):
-        self.item_key = item_key
-        self.items_key = items_key
-
-    @property
-    def increment(self):
-        return ("MOVE", self.item_key, self.items_key, "INCREMENT")
-
-    @property
-    def decrement(self):
-        return ("MOVE", self.item_key, self.items_key, "DECREMENT")
-
-
-ADD = Action("ADD")
-REMOVE = Action("REMOVE")
-SET = Action("SET")

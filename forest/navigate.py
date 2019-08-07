@@ -44,7 +44,7 @@ class FileName(Observable):
         super().__init__()
 
     def on_change(self, attr, old, new):
-        self.notify(("SET", "file_name", new))
+        self.notify(actions.set_item("file_name", new))
 
     def render(self, state):
         if "file_name" in state:
@@ -137,7 +137,7 @@ class Navigator(Observable):
     def on_change(self, category):
         # Facade: between bokeh callback and FOREST actions
         def callback(attr, old, new):
-            self.notify(set_action(category, new))
+            self.notify(actions.set_item(category, new))
         return callback
 
     def on_click(self, item_key, items_key, direction):
@@ -145,21 +145,11 @@ class Navigator(Observable):
         def callback():
             msg = "unknown direction: '{}'".format(direction)
             assert direction.lower() in ["next", "previous"], msg
-            self.notify(move_action(item_key, items_key, direction))
+            if direction.lower() == "next":
+                self.notify(actions.next_item(item_key, items_key))
+            else:
+                self.notify(actions.previous_item(item_key, items_key))
         return callback
-
-
-def set_action(attr, value):
-    return actions.Set(attr, value)
-
-
-def move_action(item_key, items_key, direction):
-    move = actions.Move(item_key, items_key)
-    if direction == "next":
-        action = move.increment
-    else:
-        action = move.decrement
-    return action
 
 
 class SQL(object):

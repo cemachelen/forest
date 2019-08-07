@@ -1,6 +1,34 @@
 import unittest
 import forest
-from forest.actions import SET, ADD, REMOVE
+
+
+class TestActionCreators(unittest.TestCase):
+    def test_next_item(self):
+        result = forest.actions.next_item("item", "items")
+        expect = {
+            "kind": forest.actions.NEXT_ITEM,
+            "item_key": "item",
+            "items_key": "items"
+        }
+        self.assertEqual(expect, result)
+
+    def test_previous_item(self):
+        result = forest.actions.previous_item("item", "items")
+        expect = {
+            "kind": forest.actions.PREVIOUS_ITEM,
+            "item_key": "item",
+            "items_key": "items"
+        }
+        self.assertEqual(expect, result)
+
+    def test_set_item(self):
+        result = forest.actions.set_item("k", "v")
+        expect = {
+            "kind": forest.actions.SET_ITEM,
+            "key": "k",
+            "value": "v"
+        }
+        self.assertEqual(expect, result)
 
 
 class TestForwardBackward(unittest.TestCase):
