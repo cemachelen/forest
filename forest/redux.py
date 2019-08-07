@@ -10,13 +10,11 @@ complex model view controller relationships
 """
 from collections import OrderedDict
 from forest.observe import Observable
-from forest import reducers
+from forest import actions
 
 __all__ = [
     "Store",
-    "reducer",
-    "combine_reducers",
-    "subtree"
+    "reducer"
 ]
 
 
@@ -39,23 +37,54 @@ class Store(Observable):
         self.notify(self.state)
 
 
-def subtree(callback, key):
-    """Pass state sub-tree to callback/view"""
-    def wrapper(state):
-        callback(state.get(key, {}))
-    return wrapper
+def reducer(state, action):
+    kind = action["kind"]
+    if kind == actions.SET_ITEM:
+        return set_reducer(state, action)
+    elif kind == actions.NEXT_ITEM:
+        return next_reducer(state, action)
+    elif kind == actions.PREVIOUS_ITEM:
+        return previous_reducer(state, action)
+    return state
 
 
-def combine_reducers(**reducers):
-    """Helper method to decouple reducer responsibilities"""
-    def reducer(state, action):
-        for key, reducer in reducers.items():
-            state[key] = reducer(state.get(key, {}), action)
+def set_reducer(state, action):
+    state = dict(state)
+    key, value = action["key"], action["value"]
+    state[key] = value
+    return state
+
+
+def next_reducer(state, action):
+    return select_reducer(state, action, next_value)
+
+
+def next_value(items, item=None):
+    if item is None:
+        return max(items)
+    items = list(sorted(items))
+    i = items.index(item)
+    return items[(i + 1) % len(items)]
+
+
+def previous_reducer(state, action):
+    return select_reducer(state, action, previous_value)
+
+
+def previous_value(items, item):
+    if item is None:
+        return min(items)
+    items = list(sorted(items))
+    i = items.index(item)
+    return items[i - 1]
+
+
+def select_reducer(state, action, method):
+    item_key = action["item_key"]
+    items_key = action["items_key"]
+    if items_key in state:
+        item = state.get(item_key, None)
+        items = state[items_key]
+        state[item_key] = method(items, item)
         return state
-    return reducer
-
-
-reducer = combine_reducers(**{
-    'navigate': reducers.navigate,
-    'preset': reducers.preset
-})
+    return state

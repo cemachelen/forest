@@ -33,21 +33,16 @@ class TestActionCreators(unittest.TestCase):
 
 class TestForwardBackward(unittest.TestCase):
     def test_reducer_given_empty_state(self):
-        action = ("navigate", "move", "item", "items", "increment")
+        action = forest.actions.next_item("item", "items")
         result = forest.reducer({}, action)
-        expect = {
-            "navigate": {},
-            "preset": {}
-        }
+        expect = {}
         self.assertEqual(expect, result)
 
     def test_reducer_next_default_value_returns_max(self):
         pressures = [1, 2, 3]
-        action = ("navigate", "move", "pressure", "pressures", "increment")
-        state = forest.reducer({
-                "navigate": {"pressures": pressures}
-            }, action)
-        result = state["navigate"]
+        state = {"pressures": pressures}
+        action = forest.actions.next_item("pressure", "pressures")
+        result = forest.reducer(state, action)
         expect = {
             "pressures": pressures,
             "pressure": 3
@@ -55,17 +50,13 @@ class TestForwardBackward(unittest.TestCase):
         self.assertEqual(expect, result)
 
     def test_reducer_next_item_given_item_in_items(self):
-        item = 2
         items = [1, 2, 3, 4, 5]
-        action = ("navigate", "move", "item", "items", "increment")
         state = {
-            "navigate": {
-                "item": item,
-                "items": items
-            }
+            "item": 2,
+            "items": items
         }
-        state = forest.reducer(state, action)
-        result = state["navigate"]
+        action = forest.actions.next_item("item", "items")
+        result = forest.reducer(state, action)
         expect = {
             "item": 3,
             "items": items
@@ -74,14 +65,12 @@ class TestForwardBackward(unittest.TestCase):
 
     def test_reducer_decrease_default_value_returns_min(self):
         pressures = [1, 2, 3]
-        action = ("navigate", "move", "pressure", "pressures", "decrement")
+        action = forest.actions.previous_item(
+                "pressure", "pressures")
         state = {
-            "navigate": {
-                "pressures": pressures
-            }
+            "pressures": pressures
         }
-        state = forest.reducer(state, action)
-        result = state["navigate"]
+        result = forest.reducer(state, action)
         expect = {
             "pressures": pressures,
             "pressure": 1

@@ -60,8 +60,9 @@ class TestMiddleware(unittest.TestCase):
     def test_file_system_given_file_sets_variables(self):
         with netCDF4.Dataset(self.path, "w") as dataset:
             eida50(dataset)
-        self.store.dispatch(("navigate", "set", "file_name", self.path))
-        result = self.store.state["navigate"]["variables"]
+        action = forest.actions.set_item("file_name", self.path)
+        self.store.dispatch(action)
+        result = self.store.state["variables"]
         expect = ['time', 'longitude', 'latitude', 'data']
         self.assertEqual(expect, result)
 
@@ -71,9 +72,14 @@ class TestMiddleware(unittest.TestCase):
             eida50(dataset, time=len(times))
             var = dataset.variables["time"]
             var[:] = netCDF4.date2num(times, units=var.units)
-        self.store.dispatch(("navigate", "set", "file_name", self.path))
-        self.store.dispatch(("navigate", "set", "variable", "data"))
-        result = self.store.state["navigate"]["valid_times"]
+
+        actions = [
+            forest.actions.set_item("file_name", self.path),
+            forest.actions.set_item("variable", "data")
+        ]
+        for action in actions:
+            self.store.dispatch(action)
+        result = self.store.state["valid_times"]
         expect = times
         self.assertEqual(expect, result)
 

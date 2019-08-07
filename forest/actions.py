@@ -1,13 +1,8 @@
-"""Tokens to communicate between components
-
-Module constants prevent string literals from polluting the code base
-and factory methods are more readable, ``action = SET.file_name.to('file.nc')``
-is easier to read than ``action = ("SET", "file_name", "file.nc")``
+"""Data structures to decouple communication between components
 """
-import datetime as dt
+
 
 __all__ = [
-    "ActionLog",
 ]
 
 
@@ -28,7 +23,7 @@ def previous_item(item_key, items_key):
     return {**locals(), **dict(kind=PREVIOUS_ITEM)}
 
 
-class ActionLog(object):
+class Log(object):
     """Middleware to capture history of actions"""
     def __init__(self):
         self.actions = []

@@ -87,9 +87,9 @@ def main(argv=None):
 
     # Initial state
     if len(args.files) > 0:
-        store.dispatch(actions.SET.file_names.to(args.files))
+        store.dispatch(actions.set_item("file_names", args.files))
     else:
-        store.dispatch(actions.SET.patterns.to(config.patterns))
+        store.dispatch(actions.set_item("patterns", config.patterns))
 
     # Access latest files
     data.FILE_DB.sync()

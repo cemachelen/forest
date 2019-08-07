@@ -173,29 +173,28 @@ class FileSystem(object):
         def inner(next_method):
             def inner_most(action):
                 next_method(action)
-                section, kind, attr, *rest = action
-                if section.lower() != "navigate":
-                    return
-                if kind.upper() == "SET":
-                    if attr.upper() == "FILE_NAME":
+                kind = action["kind"]
+                if kind == actions.SET_ITEM:
+                    key = action["key"]
+                    if key.upper() == "FILE_NAME":
                         self.set_file_name(action, next_method, store)
-                    elif attr.upper() == "VARIABLE":
+                    elif key.upper() == "VARIABLE":
                         self.set_variable(action, next_method, store)
             return inner_most
         return inner
 
     def set_file_name(self, action, next_method, store):
-        _, _, _, file_name = action
+        file_name = action["value"]
         values = variables(file_name)
-        next_method(("navigate", "set", "variables", values))
+        next_method(actions.set_item("variables", values))
         if "variable" in store.state:
             values = valid_times(file_name)
-            next_method(("navigate", "set", "valid_times", values))
+            next_method(actions.set_item("valid_times", values))
 
     def set_variable(self, action, next_method, store):
-        file_name = store.state["navigate"]["file_name"]
+        file_name = store.state["file_name"]
         values = valid_times(file_name)
-        next_method(("navigate", "set", "valid_times", values))
+        next_method(actions.set_item("valid_times", values))
 
 
 def variables(file_name):
