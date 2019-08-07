@@ -45,6 +45,54 @@ def main(argv=None):
             assert os.path.exists(args.database), "{} must exist".format(args.database)
         database = db.Database.connect(args.database)
 
+    # Full screen map
+    lon_range = (0, 30)
+    lat_range = (0, 30)
+    x_range, y_range = geo.web_mercator(
+        lon_range,
+        lat_range)
+    figure = bokeh.plotting.figure(
+        x_range=x_range,
+        y_range=y_range,
+        x_axis_type="mercator",
+        y_axis_type="mercator",
+        active_scroll="wheel_zoom")
+    tile = bokeh.models.WMTSTileSource(
+        url="https://maps.wikimedia.org/osm-intl/{Z}/{X}/{Y}.png",
+        attribution=""
+    )
+    figures = [figure]
+    for _ in range(2):
+        f = bokeh.plotting.figure(
+            x_range=figure.x_range,
+            y_range=figure.y_range,
+            x_axis_type="mercator",
+            y_axis_type="mercator",
+            active_scroll="wheel_zoom")
+        figures.append(f)
+    for f in figures:
+        f.axis.visible = False
+        f.toolbar.logo = None
+        f.toolbar_location = None
+        f.min_border = 0
+        f.add_tile(tile)
+    figure_row = bokeh.layouts.row(*figures,
+            sizing_mode="stretch_both")
+    figure_row.children = [figures[0]]  # Trick to keep correct sizing modes
+    color_mapper = bokeh.models.LinearColorMapper(
+            low=0,
+            high=1,
+            palette=bokeh.palettes.Plasma[256])
+    for figure in figures:
+        colorbar = bokeh.models.ColorBar(
+            color_mapper=color_mapper,
+            orientation="horizontal",
+            background_fill_alpha=0.,
+            location="bottom_center",
+            major_tick_line_color="black",
+            bar_line_color="black")
+        figure.add_layout(colorbar, 'center')
+
     # Redux design-pattern: middleware, store, action and reducer
     middlewares = []
     if args.database is None:
@@ -52,7 +100,7 @@ def main(argv=None):
     else:
         middlewares.append(navigate.SQL())
 
-    log = forest.ActionLog()
+    log = forest.actions.Log()
     middlewares.append(log)
 
     store = forest.Store(forest.reducer, middlewares=middlewares)
@@ -94,44 +142,6 @@ def main(argv=None):
     # Access latest files
     data.FILE_DB.sync()
 
-    # Full screen map
-    lon_range = (0, 30)
-    lat_range = (0, 30)
-    x_range, y_range = geo.web_mercator(
-        lon_range,
-        lat_range)
-    figure = bokeh.plotting.figure(
-        x_range=x_range,
-        y_range=y_range,
-        x_axis_type="mercator",
-        y_axis_type="mercator",
-        active_scroll="wheel_zoom")
-    tile = bokeh.models.WMTSTileSource(
-        url="https://maps.wikimedia.org/osm-intl/{Z}/{X}/{Y}.png",
-        attribution=""
-    )
-
-    figures = [figure]
-    for _ in range(2):
-        f = bokeh.plotting.figure(
-            x_range=figure.x_range,
-            y_range=figure.y_range,
-            x_axis_type="mercator",
-            y_axis_type="mercator",
-            active_scroll="wheel_zoom")
-        figures.append(f)
-
-    for f in figures:
-        f.axis.visible = False
-        f.toolbar.logo = None
-        f.toolbar_location = None
-        f.min_border = 0
-        f.add_tile(tile)
-
-    figure_row = bokeh.layouts.row(*figures,
-            sizing_mode="stretch_both")
-    figure_row.children = [figures[0]]  # Trick to keep correct sizing modes
-
     figure_drop = bokeh.models.Dropdown(
             label="Figure",
             menu=[(str(i), str(i)) for i in [1, 2, 3]])
@@ -151,20 +161,6 @@ def main(argv=None):
                     figures[2]]
 
     figure_drop.on_change("value", on_change)
-
-    color_mapper = bokeh.models.LinearColorMapper(
-            low=0,
-            high=1,
-            palette=bokeh.palettes.Plasma[256])
-    for figure in figures:
-        colorbar = bokeh.models.ColorBar(
-            color_mapper=color_mapper,
-            orientation="horizontal",
-            background_fill_alpha=0.,
-            location="bottom_center",
-            major_tick_line_color="black",
-            bar_line_color="black")
-        figure.add_layout(colorbar, 'center')
 
     # NOTE: Following code should not depend on SQL database
     if (args.config_file is not None) and (args.database is not None):

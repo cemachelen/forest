@@ -2,7 +2,7 @@ import bokeh.models
 
 
 class Image(object):
-    def __init__(self, color_mapper, hover_tool=None):
+    def __init__(self, color_mapper, tooltips=None, formatters=None):
         self.color_mapper = color_mapper
         self.source = bokeh.models.ColumnDataSource({
                 "x": [],
@@ -10,24 +10,22 @@ class Image(object):
                 "dw": [],
                 "dh": [],
                 "image": []})
-        self.hover_tool = hover_tool
+        self.tooltips = tooltips
+        self.formatters = formatters
 
     @classmethod
-    def unified_model(cls):
-        hover_tool = bokeh.models.HoverTool(
-                renderers=[renderer],
-                tooltips=[
-                    ("Name", "@name"),
-                    ("Value", "@image"),
-                    ('Length', '@length'),
-                    ('Valid', '@valid{%F %H:%M}'),
-                    ('Initial', '@initial{%F %H:%M}'),
-                    ("Level", "@level")],
-                formatters={
-                    'valid': 'datetime',
-                    'initial': 'datetime'
-                })
-        return cls(color_mapper, hover_tool)
+    def unified_model(cls, color_mapper):
+        tooltips = [
+                ("Name", "@name"),
+                ("Value", "@image"),
+                ('Length', '@length'),
+                ('Valid', '@valid{%F %H:%M}'),
+                ('Initial', '@initial{%F %H:%M}'),
+                ("Level", "@level")]
+        formatters = {
+                'valid': 'datetime',
+                'initial': 'datetime'}
+        return cls(color_mapper, tooltips=tooltips, formatters=formatters)
 
     def render(self, data):
         self.source.data = data
@@ -41,6 +39,10 @@ class Image(object):
                 image="image",
                 source=self.source,
                 color_mapper=self.color_mapper)
-        if self.hover_tool is not None:
-            figure.add_tools(self.hover_tool)
+        if self.tooltips is not None:
+            hover_tool = bokeh.models.HoverTool(
+                    renderers=[renderer],
+                    tooltips=self.tooltips,
+                    formatters=self.formatters)
+            figure.add_tools(hover_tool)
         return renderer
