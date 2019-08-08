@@ -158,11 +158,6 @@ class SQL(object):
     @middleware
     def __call__(self, store, next_method, action):
         next_method(action)
-        kind, *rest = action
-        if kind.upper() == "SET":
-            attr, value = rest
-            if attr.upper() == "PATTERN":
-                next_method(("SET", "variables", ["mslp"]))
 
 
 class FileSystem(object):
@@ -173,12 +168,12 @@ class FileSystem(object):
         kind = action["kind"]
         if kind == actions.SET_ITEM:
             key = action["key"]
-            if key.upper() == "FILE_NAME":
-                self.set_file_name(action, next_method, store)
-            elif key.upper() == "VARIABLE":
-                self.set_variable(action, next_method, store)
+            if key.lower() == "file_name":
+                self.set_file_name(store, next_method, action)
+            elif key.lower() == "variable":
+                self.set_variable(store, next_method, action)
 
-    def set_file_name(self, action, next_method, store):
+    def set_file_name(self, store, next_method, action):
         file_name = action["value"]
         values = variables(file_name)
         next_method(actions.set_item("variables", values))
@@ -186,7 +181,7 @@ class FileSystem(object):
             values = valid_times(file_name)
             next_method(actions.set_item("valid_times", values))
 
-    def set_variable(self, action, next_method, store):
+    def set_variable(self, store, next_method, action):
         file_name = store.state["file_name"]
         values = valid_times(file_name)
         next_method(actions.set_item("valid_times", values))

@@ -20,11 +20,12 @@ class Component(object):
 
 class Message(object):
     def __init__(self):
-        self.div = bokeh.models.Div()
+        self.dropdown = bokeh.models.Dropdown(disabled=True)
+        self.layout = self.dropdown
 
     def __call__(self, state):
         state = restrict(state, ["file_name"])
-        self.div.text = state.get("file_name", "")
+        self.dropdown.label = state.get("file_name", "")
 
 
 def image(render, load):

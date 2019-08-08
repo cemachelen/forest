@@ -121,8 +121,10 @@ def main(argv=None):
     # Hook up components to state changes
     msg = component.Message()
     viewer = view.Image.unified_model(color_mapper)
+    renderers = []
     for figure in figures:
         renderer = viewer.add_figure(figure)
+        renderers.append(renderer)
     if True:
         loader = data.FSLoader()
     else:
@@ -133,6 +135,8 @@ def main(argv=None):
     connect(components, store)
 
     image_sources = [viewer.source]
+
+    slider = transparent_slider(renderers)
 
     # Initial state
     if len(args.files) > 0:
@@ -243,21 +247,6 @@ def main(argv=None):
 
     dropdown.on_change("value", on_change)
 
-    slider = bokeh.models.Slider(
-        start=0,
-        end=1,
-        step=0.1,
-        value=1.0,
-        show_value=False)
-    custom_js = bokeh.models.CustomJS(
-            args=dict(renderers=renderers),
-            code="""
-            renderers.forEach(function (r) {
-                r.glyph.global_alpha = cb_obj.value
-            })
-            """)
-    slider.js_on_change("value", custom_js)
-
     colors_controls = colors.Controls(
             color_mapper, "Plasma", 256)
 
@@ -321,7 +310,7 @@ def main(argv=None):
                 bokeh.models.Div(text="Compare:"),
                 bokeh.layouts.row(figure_drop),
                 image_controls.column,
-                msg.div),
+                msg.layout),
             title="Control"
         ),
         bokeh.models.Panel(
@@ -417,6 +406,25 @@ def main(argv=None):
     document.add_root(control_root)
     document.add_root(series_row)
     document.add_root(figure_row)
+
+
+def transparent_slider(renderers):
+    """Create a Slider to modify glyph_renderer alpha values"""
+    slider = bokeh.models.Slider(
+        start=0,
+        end=1,
+        step=0.1,
+        value=1.0,
+        show_value=False)
+    custom_js = bokeh.models.CustomJS(
+            args=dict(renderers=renderers),
+            code="""
+            renderers.forEach(function (r) {
+                r.glyph.global_alpha = cb_obj.value
+            })
+            """)
+    slider.js_on_change("value", custom_js)
+    return slider
 
 
 from itertools import cycle
