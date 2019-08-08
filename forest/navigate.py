@@ -3,6 +3,7 @@ import bokeh.models
 from forest.observe import Observable
 from forest.db.util import autowarn
 from forest import actions
+from forest.middleware import middleware
 
 
 __all__ = [
@@ -154,34 +155,28 @@ class Navigator(Observable):
 
 class SQL(object):
     """SQL queries to populate state"""
-    def __call__(self, store):
-        def inner(next_method):
-            def inner_most(action):
-                next_method(action)
-                kind, *rest = action
-                if kind.upper() == "SET":
-                    attr, value = rest
-                    if attr.upper() == "PATTERN":
-                        next_method(("SET", "variables", ["mslp"]))
-            return inner_most
-        return inner
+    @middleware
+    def __call__(self, store, next_method, action):
+        next_method(action)
+        kind, *rest = action
+        if kind.upper() == "SET":
+            attr, value = rest
+            if attr.upper() == "PATTERN":
+                next_method(("SET", "variables", ["mslp"]))
 
 
 class FileSystem(object):
     """Access file system to populate state"""
-    def __call__(self, store):
-        def inner(next_method):
-            def inner_most(action):
-                next_method(action)
-                kind = action["kind"]
-                if kind == actions.SET_ITEM:
-                    key = action["key"]
-                    if key.upper() == "FILE_NAME":
-                        self.set_file_name(action, next_method, store)
-                    elif key.upper() == "VARIABLE":
-                        self.set_variable(action, next_method, store)
-            return inner_most
-        return inner
+    @middleware
+    def __call__(self, store, next_method, action):
+        next_method(action)
+        kind = action["kind"]
+        if kind == actions.SET_ITEM:
+            key = action["key"]
+            if key.upper() == "FILE_NAME":
+                self.set_file_name(action, next_method, store)
+            elif key.upper() == "VARIABLE":
+                self.set_variable(action, next_method, store)
 
     def set_file_name(self, action, next_method, store):
         file_name = action["value"]
