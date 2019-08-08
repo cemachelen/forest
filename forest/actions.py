@@ -1,6 +1,7 @@
 """Data structures to decouple communication between components
 """
 import datetime as dt
+from forest.middleware import middleware
 
 
 __all__ = [
@@ -29,13 +30,10 @@ class Log(object):
     def __init__(self):
         self.actions = []
 
-    def __call__(self, store):
-        def inner(next_method):
-            def inner_most(action):
-                self.actions.append(action)
-                next_method(action)
-            return inner_most
-        return inner
+    @middleware
+    def __call__(self, store, next_method, action):
+        self.actions.append(action)
+        next_method(action)
 
     def summary(self, state):
         """Print a summary of recorded actions"""

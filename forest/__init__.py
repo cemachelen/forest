@@ -10,3 +10,4 @@ from .redux import *
 from .actions import *
 from .navigate import *
 from .observe import *
+from .middleware import *
