@@ -31,21 +31,29 @@ def ui_remove():
 class UI(Observable):
     """User interface to layers"""
     def __init__(self):
+        width = 50
+        self.widths = {
+            "dropdown": 230,
+            "group": 50
+        }
         self.buttons = {
-            "add": bokeh.models.Button(label="Add"),
-            "remove": bokeh.models.Button(label="Remove"),
+            "add": bokeh.models.Button(label="Add", width=width),
+            "remove": bokeh.models.Button(label="Remove", width=width),
         }
         self.buttons["add"].on_click(self.on_add)
         self.buttons["remove"].on_click(self.on_remove)
         self.layout = bokeh.layouts.column(
                 bokeh.layouts.row(
-                    self.buttons["remove"],
-                    self.buttons["add"]))
+                    self.buttons["add"],
+                    self.buttons["remove"]))
         super().__init__()
 
     def on_add(self):
-        dropdown = bokeh.models.Dropdown()
-        group = bokeh.models.CheckboxButtonGroup()
+        dropdown = bokeh.models.Dropdown(
+                width=self.widths["dropdown"])
+        group = bokeh.models.CheckboxButtonGroup(
+                labels=["Show"],
+                width=self.widths["group"])
         row = bokeh.layouts.row(dropdown, group)
         self.layout.children.insert(-1, row)
         self.notify(ui_add(dropdown, group))

@@ -16,6 +16,7 @@ import parse_args
 from db.util import autolabel
 import datetime as dt
 
+import layer
 import actions
 import navigate
 import component
@@ -301,6 +302,9 @@ def main(argv=None):
         # Ensure all listeners are pointing to the current state
         controls.notify(controls.state)
 
+    ui = layer.UI()
+    ui.subscribe(print)
+
     tabs = bokeh.models.Tabs(tabs=[
         bokeh.models.Panel(
             child=bokeh.layouts.column(
@@ -310,6 +314,7 @@ def main(argv=None):
                 bokeh.models.Div(text="Compare:"),
                 bokeh.layouts.row(figure_drop),
                 image_controls.column,
+                ui.layout,
                 msg.layout),
             title="Control"
         ),
