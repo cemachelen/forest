@@ -5,6 +5,7 @@ Layer architecture
 import bokeh.models
 import bokeh.layouts
 import numpy as np
+from forest.observe import Observable
 
 
 UI_ADD = "UI_ADD"
@@ -27,7 +28,7 @@ def ui_remove():
     }
 
 
-class UI(object):
+class UI(Observable):
     """User interface to layers"""
     def __init__(self):
         self.buttons = {
@@ -40,17 +41,19 @@ class UI(object):
                 bokeh.layouts.row(
                     self.buttons["remove"],
                     self.buttons["add"]))
+        super().__init__()
 
     def on_add(self):
         dropdown = bokeh.models.Dropdown()
         group = bokeh.models.CheckboxButtonGroup()
         row = bokeh.layouts.row(dropdown, group)
         self.layout.children.insert(-1, row)
-        # self.notify(ui_add(dropdown, group))
+        self.notify(ui_add(dropdown, group))
 
     def on_remove(self):
-        self.layout.children.pop(-2)
-        # self.notify(ui_remove())
+        if len(self.layout.children) > 1:
+            self.layout.children.pop(-2)
+            self.notify(ui_remove())
 
 
 class Controls(object):

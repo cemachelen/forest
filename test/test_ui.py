@@ -1,4 +1,5 @@
 import unittest
+import unittest.mock
 from forest import layer
 import bokeh.models
 
@@ -46,6 +47,23 @@ class TestUI(unittest.TestCase):
         self.ui.on_add()
         self.ui.on_remove()
         self.assertEqual(self.ui.layout.children[-1].id, expect)
+
+    def test_on_add_emits_ui_add_action(self):
+        listener = unittest.mock.Mock()
+        self.ui.subscribe(listener)
+        self.ui.on_add()
+        dropdown = self.ui.layout.children[0].children[0]
+        group = self.ui.layout.children[0].children[1]
+        expect = layer.ui_add(dropdown, group)
+        listener.assert_called_once_with(expect)
+
+    def test_on_remove_emits_ui_remove_action(self):
+        listener = unittest.mock.Mock()
+        self.ui.on_add()
+        self.ui.subscribe(listener)
+        self.ui.on_remove()
+        expect = layer.ui_remove()
+        listener.assert_called_once_with(expect)
 
     def assert_is_row(self, child):
         self.assertIsInstance(child, bokeh.layouts.Row)
