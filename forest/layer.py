@@ -69,6 +69,34 @@ class Controls(object):
         self.loader_factory = LoaderFactory()
         self.figures = figures
         self.menu = menu
+        self.views = []
+
+    def on_action(self, action):
+        kind = action["kind"]
+        if kind == UI_ADD:
+            self.ui_add(**action["payload"])
+        elif kind == UI_REMOVE:
+            self.ui_remove()
+
+    def ui_add(self, dropdown, group):
+        source_factory = SourceFactory()
+        views = []
+        for figure in self.figures:
+            glyph_factory = GlyphFactory(source_factory, figure)
+            view = VisibleGlyphs(glyph_factory)
+            views.append(view)
+        dropdown.menu = self.menu
+        dropdown.on_change("value", self.on_change(source_factory))
+        for view in views:
+            dropdown.on_change("value", view.on_change)
+        left_right = LeftRight(views, group=group)
+        self.views.append(views)
+
+    def ui_remove(self):
+        if len(self.views) == 0:
+            return
+        for view in self.views[-1]:
+            view.visible = False
 
     def add_control(self, color):
         source_factory = SourceFactory()
@@ -94,10 +122,13 @@ class Controls(object):
 
 class LeftRight(object):
     """Control left/right visibility"""
-    def __init__(self, views):
+    def __init__(self, views, group=None):
+        if group is None:
+            group = bokeh.models.CheckboxButtonGroup()
         self.views = views
-        self.group = bokeh.models.CheckboxButtonGroup(
-                labels=["L", "R"])
+        self.labels = ["L", "R"]
+        self.group = group
+        self.group.labels = self.labels
         self.group.on_change("active", self.on_change)
 
     def on_change(self, attr, old, new):
@@ -114,8 +145,8 @@ class LoaderFactory(object):
         if file_name not in self.cache:
             # Random data per file
             self.cache[file_name] = {
-                "x": np.random.randn(10),
-                "y": np.random.randn(10)
+                "x": 1e6 * np.random.randn(10),
+                "y": 1e6 * np.random.randn(10)
             }
         return self.cache[file_name]
 
@@ -158,7 +189,7 @@ class VisibleGlyphs(object):
 
 class GlyphFactory(object):
     """Delegates construction of GlyphRenderers to other objects"""
-    def __init__(self, source_factory, figure, color):
+    def __init__(self, source_factory, figure, color="blue"):
         self.source_factory = source_factory
         self.figure = figure
         self.color = color

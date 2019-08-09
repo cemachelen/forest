@@ -303,7 +303,11 @@ def main(argv=None):
         controls.notify(controls.state)
 
     ui = layer.UI()
+    ui_controls = layer.Controls(
+            figures,
+            menu=[("file.nc", "file.nc")])
     ui.subscribe(print)
+    ui.subscribe(ui_controls.on_action)
 
     tabs = bokeh.models.Tabs(tabs=[
         bokeh.models.Panel(
