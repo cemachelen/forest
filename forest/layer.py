@@ -187,6 +187,23 @@ class VisibleGlyphs(object):
                 glyph.visible = False
 
 
+class GlyphMap(object):
+    """Coordinate visibility of multiple renderers"""
+    def __init__(self):
+        self.glyphs = {}
+
+    def insert(self, key, glyph):
+        self.glyphs[key] = glyph
+
+    def mute_all(self):
+        for glyph in self.glyphs.values():
+            glyph.visible = False
+
+    def mute_all_except(self, key):
+        for k, glyph in self.glyphs.items():
+            glyph.visible = k == key
+
+
 class GlyphFactory(object):
     """Delegates construction of GlyphRenderers to other objects"""
     def __init__(self, source_factory, figure, color="blue"):
