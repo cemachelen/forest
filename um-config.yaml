@@ -1,0 +1,6 @@
+
+files:
+   - label: Unified Model
+     pattern: "*unified_model.nc"
+     directory: .
+     locator: database

@@ -1,0 +1,14 @@
+
+files:
+   - label: UM
+     pattern: "unified_model*.nc"
+     locator: file_system
+     file_type: unified_model
+   - label: EIDA50
+     pattern: "eida50*.nc"
+     locator: file_system
+     file_type: eida50
+   - label: RDT
+     pattern: "rdt*.json"
+     locator: file_system
+     file_type: rdt
