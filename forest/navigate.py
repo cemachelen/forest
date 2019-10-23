@@ -6,7 +6,8 @@ from .exceptions import (
         InitialTimeNotFound,
         ValidTimesNotFound,
         PressuresNotFound)
-from . import (
+from forest import (
+        gridded_forecast,
         unified_model,
         eida50,
         rdt)
@@ -30,7 +31,6 @@ class Config(object):
             self.navigators[group.pattern] = FileSystem.file_type(paths, group.file_type)
 
     def variables(self, pattern):
-        print(pattern)
         return self.navigators[pattern].variables(pattern)
 
     def initial_times(self, pattern, variable=None):
@@ -61,6 +61,9 @@ class FileSystem(object):
             coordinates = rdt.Coordinates()
         elif file_type.lower() == "eida50":
             coordinates = eida50.Coordinates()
+        elif file_type.lower() == 'griddedforecast':
+            # XXX This needs a "Group" object ... not "paths"
+            return gridded_forecast.Navigator(paths)
         elif file_type.lower() == "unified_model":
             coordinates = unified_model.Coordinates()
         else:
