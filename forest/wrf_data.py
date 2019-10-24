@@ -143,7 +143,7 @@ class Locator(object):
     def initial_time_netcdf4(self, path):
         with netCDF4.Dataset(path) as dataset:
             try:
-                var = dataset.variables["START_DATE"]
+                var = dataset.variables["forecast_reference_time"]
                 result = netCDF4.num2date(var[:], units=var.units)
             except KeyError:
                 result = None
@@ -160,7 +160,7 @@ class InitialTimeLocator(object):
     @staticmethod
     def netcdf4_strategy(path):
         with netCDF4.Dataset(path) as dataset:
-            var = dataset.variables["START_DATE" ]
+            var = dataset.variables["forecast_reference_time" ]
             values = netCDF4.num2date(var[:], units=var.units)
         return values
 

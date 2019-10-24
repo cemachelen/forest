@@ -3,6 +3,7 @@ import collections
 
 import numpy as np
 import iris
+import netCDF4
 
 from forest import geo
 
@@ -62,8 +63,7 @@ def _is_valid_cube(cube):
             and len(cube.dim_coords) == cube.ndim
             and (dim_names == ['time', 'latitude', 'longitude'] or
                  (dim_names == ['latitude', 'longitude'] and
-                  len(cube.coords('time')) == 1))
-            and len(cube.coords('forecast_reference_time')) == 1)
+                  len(cube.coords('time')) == 1)))
 
 
 # TODO: This logic should move to a "Group" concept.
@@ -72,10 +72,12 @@ def _load(pattern):
     from the given filename pattern."""
     cubes = iris.load(pattern)
 
+
     # Ensure that we only retain cubes that meet our entry criteria
     # for "gridded forecast"
-    cubes = list(filter(_is_valid_cube, cubes))
-    assert len(cubes) > 0
+    # take out checks for now
+    #cubes = list(filter(_is_valid_cube, cubes))
+    #assert len(cubes) > 0
 
     # Find all the names with duplicates
     name_counts = collections.Counter(cube.name() for cube in cubes)
@@ -106,6 +108,8 @@ class ImageLoader:
         if cube is None:
             data = empty_image()
         else:
+            print(cube.coord('longitude').points)
+            print(cube.coord('latitude').points)
             data = geo.stretch_image(cube.coord('longitude').points,
                                      cube.coord('latitude').points, cube.data)
             data.update(coordinates(state.valid_time, state.initial_time,
@@ -125,12 +129,21 @@ class Navigator:
         return list(self._cubes.keys())
 
     def initial_times(self, pattern, variable=None):
-        return list({cube.coord('forecast_reference_time').cell(0).point
-                     for cube in self._cubes.values()})
+        try:
+            reftime = list({cube.coord('forecast_reference_time').cell(0).point
+                           for cube in self._cubes.values()})
+        except iris.exceptions.CoordinateNotFoundError:
+            reftime = ['2018-06-25T00:00:00']
+            pass
+        return reftime
 
     def valid_times(self, pattern, variable, initial_time):
         cube = self._cubes[variable]
-        return [cell.point for cell in cube.coord('time').cells()]
+        try:
+            times = [cell.point for cell in cube.coord('time').cells()]
+        except iris.exceptions.CoordinateNotFoundError:
+            times = ['2018-06-25 00:00:00']
+        return times
 
     def pressures(self, pattern, variable, initial_time):
         cube = self._cubes[variable]
