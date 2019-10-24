@@ -108,8 +108,7 @@ class ImageLoader:
         if cube is None:
             data = empty_image()
         else:
-            print(cube.coord('longitude').points)
-            print(cube.coord('latitude').points)
+            print('imaged loader called')
             data = geo.stretch_image(cube.coord('longitude').points,
                                      cube.coord('latitude').points, cube.data)
             data.update(coordinates(state.valid_time, state.initial_time,
