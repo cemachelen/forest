@@ -54,7 +54,7 @@ def main(argv=None):
         url="https://maps.wikimedia.org/osm-intl/{Z}/{X}/{Y}.png",
         attribution=""
     )
-
+    
     figures = [figure]
     for _ in range(2):
         f = bokeh.plotting.figure(
@@ -107,7 +107,10 @@ def main(argv=None):
             background_fill_alpha=0.,
             location="bottom_center",
             major_tick_line_color="black",
-            bar_line_color="black")
+            bar_line_color="black",
+            major_label_text_font_size="18pt",
+            major_label_text_color="white",
+            major_label_text_font_style="bold")
         figure.add_layout(colorbar, 'center')
 
     # Database/File system loader(s)
@@ -227,9 +230,9 @@ def main(argv=None):
         if int(new) == 1:
             image_controls.labels = ["Show"]
         elif int(new) == 2:
-            image_controls.labels = ["L", "R"]
+            image_controls.labels = ["1", "2"]
         elif int(new) == 3:
-            image_controls.labels = ["L", "C", "R"]
+            image_controls.labels = ["1", "2", "3"]
 
     figure_drop.on_change("value", on_change)
 
@@ -333,6 +336,18 @@ def main(argv=None):
                     "y": [event.y]}
         return cb
 
+
+    def drawonmap(figure, source):
+
+        figure.multi_line('x', 'y', source=source)
+        bokeh.models.FreehandDrawTool(renderers=[r])
+        def cb(event):
+                source.data = {
+                        "x": [event.x],
+                        "y": [event.y]}
+        return cb
+
+
     marker_source = bokeh.models.ColumnDataSource({
             "x": [],
             "y": []})
@@ -344,11 +359,11 @@ def main(argv=None):
     for f in figures:
         f.on_event(bokeh.events.Tap, series.on_tap)
         f.on_event(bokeh.events.Tap, place_marker(f, marker_source))
-
+        f.on_event(bokeh.events.Tap, drawonmap(f, marker_source))
 
     # Minimise controls to ease navigation
     compact_button = bokeh.models.Button(
-            label="Compact")
+            label="-")
     compact_minus = bokeh.models.Button(label="-", width=50)
     compact_plus = bokeh.models.Button(label="+", width=50)
     compact_navigation = bokeh.layouts.column(
@@ -377,7 +392,7 @@ def main(argv=None):
             control_root.height = 500
             control_root.width = 300
             compact_button.width = 300
-            compact_button.label = "Compact"
+            compact_button.label = "-"
             control_root.children = [compact_button, tabs]
             display = "large"
 
@@ -450,7 +465,6 @@ class Series(object):
                     'x': 'datetime'
                 })
         self.figure.add_tools(tool)
-
         tool = bokeh.models.TapTool(
                 renderers=circles)
         self.figure.add_tools(tool)
