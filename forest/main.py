@@ -67,29 +67,11 @@ def main(argv=None):
             )
         figures.append(f)
 
-    source = bokeh.models.ColumnDataSource({
-        "x": [],
-        "y": [],
-    })
-
-
-    def drawonmap(figure, source):
-
-        r = figure.multi_line('x', 'y', source=source)
-        bokeh.models.FreehandDrawTool(renderers=[r])
-        def cb(event):
-                source.data = {
-                        "x": [event.x],
-                        "y": [event.y]}
-        return cb
-
     for f in figures:
         f.axis.visible = False
         f.toolbar.logo = None
         f.toolbar_location = "below"
         f.min_border = 0
-        #r = f.multi_line('x', 'y', source=source)
-        #f.add_tools(bokeh.models.FreehandDrawTool(renderers=[r]))
         f.add_tile(tile)
 
     figure_row = bokeh.layouts.row(*figures,
@@ -365,6 +347,12 @@ def main(argv=None):
     marker_source = bokeh.models.ColumnDataSource({
             "x": [],
             "y": []})
+
+
+    source = bokeh.models.ColumnDataSource({
+        "x": [],
+        "y": [],
+    })
     series = Series.from_groups(
             series_figure,
             config.file_groups,
@@ -373,7 +361,7 @@ def main(argv=None):
     for f in figures:
         f.on_event(bokeh.events.Tap, series.on_tap)
         f.on_event(bokeh.events.Tap, place_marker(f, marker_source))
-        r = f.multi_line('x', 'y', source=source, line_width=10, line_color='#000000')
+        r = f.multi_line('x', 'y', source=source, line_width=8, line_color='#0000ff')
         f.add_tools(bokeh.models.FreehandDrawTool(renderers=[r]))
 
 
