@@ -54,7 +54,7 @@ def main(argv=None):
         url="https://maps.wikimedia.org/osm-intl/{Z}/{X}/{Y}.png",
         attribution=""
     )
-    
+
     figures = [figure]
     for _ in range(2):
         f = bokeh.plotting.figure(
@@ -62,14 +62,34 @@ def main(argv=None):
             y_range=figure.y_range,
             x_axis_type="mercator",
             y_axis_type="mercator",
-            active_scroll="wheel_zoom")
+            active_scroll="wheel_zoom",
+            toolbar_location=None
+            )
         figures.append(f)
+
+    source = bokeh.models.ColumnDataSource({
+        "x": [],
+        "y": [],
+    })
+
+
+    def drawonmap(figure, source):
+
+        r = figure.multi_line('x', 'y', source=source)
+        bokeh.models.FreehandDrawTool(renderers=[r])
+        def cb(event):
+                source.data = {
+                        "x": [event.x],
+                        "y": [event.y]}
+        return cb
 
     for f in figures:
         f.axis.visible = False
         f.toolbar.logo = None
-        f.toolbar_location = None
+        f.toolbar_location = "below"
         f.min_border = 0
+        #r = f.multi_line('x', 'y', source=source)
+        #f.add_tools(bokeh.models.FreehandDrawTool(renderers=[r]))
         f.add_tile(tile)
 
     figure_row = bokeh.layouts.row(*figures,
@@ -100,6 +120,9 @@ def main(argv=None):
             low=0,
             high=1,
             palette=bokeh.palettes.Plasma[256])
+
+    bokeh.plotting .output_file('toolbar.html')
+
     for figure in figures:
         colorbar = bokeh.models.ColorBar(
             color_mapper=color_mapper,
@@ -112,6 +135,9 @@ def main(argv=None):
             major_label_text_color="white",
             major_label_text_font_style="bold")
         figure.add_layout(colorbar, 'center')
+
+
+
 
     # Database/File system loader(s)
     for group in config.file_groups:
@@ -336,18 +362,6 @@ def main(argv=None):
                     "y": [event.y]}
         return cb
 
-
-    def drawonmap(figure, source):
-
-        figure.multi_line('x', 'y', source=source)
-        bokeh.models.FreehandDrawTool(renderers=[r])
-        def cb(event):
-                source.data = {
-                        "x": [event.x],
-                        "y": [event.y]}
-        return cb
-
-
     marker_source = bokeh.models.ColumnDataSource({
             "x": [],
             "y": []})
@@ -359,7 +373,9 @@ def main(argv=None):
     for f in figures:
         f.on_event(bokeh.events.Tap, series.on_tap)
         f.on_event(bokeh.events.Tap, place_marker(f, marker_source))
-        f.on_event(bokeh.events.Tap, drawonmap(f, marker_source))
+        r = f.multi_line('x', 'y', source=source, line_width=10, line_color='#000000')
+        f.add_tools(bokeh.models.FreehandDrawTool(renderers=[r]))
+
 
     # Minimise controls to ease navigation
     compact_button = bokeh.models.Button(
